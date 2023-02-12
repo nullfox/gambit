@@ -1,0 +1,63 @@
+name = "arb"
+networkId = 42161
+chainId = 42161
+rpc = ["https://arb1.arbitrum.io/rpc"]
+# Uncoment if you have a WSS url
+# wss = ""
+dex = "camelot"
+
+[buy]
+slippage = 1
+gwei = 3
+gas = 1469174
+
+[sell]
+slippage = 25
+gwei = 3
+gas = 1469174
+
+[misc]
+loopTimeInSeconds = 1
+refreshInteractive = true
+interactiveRefreshInSeconds = 5
+approveTo = false
+maxErrorCount = 3
+toContracts = [ ]
+toContract = ""
+
+# Add additional dexes here
+[[dexes]]
+name = "sushi_arb"
+router = "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"
+factory = "0xc35dadb65012ec5796536bd9864ed8773abc74c4"
+
+[[dexes]]
+name = "camelot"
+router = "0xc873fecbd354f5a56e00e710b90ef4201db2448d"
+factory = "0x6EcCab422D763aC031210895C81787E87B43A652"
+
+# Add additional source tokens here
+# type = native | stable | reserve
+[[sources]]
+name = "AETH"
+decimals = 18
+address = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+minimumLp = 0
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type = "native"
+
+[[sources]]
+name = "USDC"
+decimals = 6
+address = "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
+minimumLp = 100
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = false
+approve = true
+type= "stable"

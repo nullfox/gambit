@@ -1,0 +1,63 @@
+name = "bsc"
+networkId = 56
+chainId = 56
+rpc = ["https://bsc-dataseed2.binance.org/"]
+# Uncoment if you have a WSS url
+# wss = ""
+dex = "pancake"
+
+[buy]
+slippage = 99
+gwei = 6
+gas = 900000
+
+[sell]
+slippage = 40
+gwei = 6
+gas = 900000
+
+[misc]
+loopTimeInSeconds = 1
+refreshInteractive = true
+interactiveRefreshInSeconds = 4
+approveTo = false
+maxErrorCount = 1
+toContracts = [ ]
+toContract = ""
+
+# Add additional dexes here
+[[dexes]]
+name = "apebsc"
+router = "0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7"
+factory = "0x0841BD0B734E4F5853f0dD8d7Ea041c241fb0Da6"
+
+[[dexes]]
+name = "pancake"
+router = "0x10ED43C718714eb63d5aA57B78B54704E256024E"
+factory = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
+
+# Add additional source tokens here
+# type = native | stable | reserve
+[[sources]]
+name = "BNB"
+decimals = 18
+address = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"
+minimumLp = 0
+totalSpend = 2
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type = "native"
+
+[[sources]]
+name = "BUSD"
+decimals = 18
+address = "0xe9e7cea3dedca5984780bafc599bd69add087d56"
+minimumLp = 100
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type= "stable"

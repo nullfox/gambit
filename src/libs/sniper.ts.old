@@ -1,0 +1,598 @@
+import { BigNumber, BigNumberish, Contract, Wallet, providers } from 'ethers';
+import { existsSync, readFileSync } from 'fs';
+import lodash from 'lodash';
+import { join } from 'path';
+import pino from 'pino';
+import TOML from 'toml';
+
+import {
+  WALLET_EXTENSION_ENCRYPTED,
+  WALLET_EXTENSION_RAW,
+} from '../constants.js';
+import * as crypt from '../services/crypt.js';
+import * as Typechain from '../typechain/index.js';
+import { toEthersFloat } from '../utils/bigNumber.js';
+
+const PATH_CHAINS_DIR = join(process.cwd(), 'configs', 'chains');
+const PATH_ABIS_DIR = join(process.cwd(), 'configs', 'abis');
+
+const ABI_PAIR = JSON.parse(
+  readFileSync(join(PATH_ABIS_DIR, 'pair.json')).toString(),
+);
+const ABI_ERC20 = JSON.parse(
+  readFileSync(join(PATH_ABIS_DIR, 'erc20.json')).toString(),
+);
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+});
+
+export default class Sniper {
+  static getWallet(walletName: string, password?: string) {
+    const inPath = join(
+      process.cwd(),
+      `${walletName}.${
+        password ? WALLET_EXTENSION_ENCRYPTED : WALLET_EXTENSION_RAW
+      }`,
+    );
+
+    if (!existsSync(inPath)) {
+      throw new Error(
+        `Could not open file "${inPath}" - please ensure it exists`,
+      );
+    }
+
+    const walletBuffer = readFileSync(inPath);
+
+    if (password) {
+      const parsed: WalletConfig = JSON.parse(
+        crypt.decrypt(walletBuffer, password).toString('utf-8'),
+      );
+
+      return {
+        address: parsed.address,
+        wallet: new Wallet(`0x${parsed.key}`),
+      };
+    }
+
+    const parsed: WalletConfig = JSON.parse(walletBuffer.toString('utf-8'));
+
+    return {
+      address: parsed.address,
+      wallet: new Wallet(`0x${parsed.key}`),
+    };
+  }
+
+  static getChainConfiguration(name: string) {
+    const chainConfigurationPath = join(PATH_CHAINS_DIR, `${name}.toml`);
+
+    if (!existsSync(chainConfigurationPath)) {
+      throw new Error(
+        `Could not open chain cnfig file "${chainConfigurationPath}" - please ensure it exists`,
+      );
+    }
+
+    const contents = readFileSync(chainConfigurationPath).toString();
+
+    return TOML.parse(contents) as ChainConfiguration;
+  }
+
+  private wallet: Wallet;
+  private walletAddress: string;
+  private chain: ChainConfiguration;
+  private dex: ChainConfiguration['dexes'][0];
+  private tokenAddress: string;
+  private rpcProviders: providers.JsonRpcProvider[];
+  private account: Wallet;
+
+  protected tokens: Map<string, Token> = new Map();
+  protected sourceTokens: Map<string, SourceToken> = new Map();
+  protected pairs: Map<string, Pair> = new Map();
+
+  constructor(
+    walletName: string,
+    chainName: string,
+    dexName: string,
+    tokenAddress: string,
+    options?: {
+      password?: string;
+      totalSpend?: number;
+      loopSpend?: number;
+      forceGas?: number;
+    },
+  ) {
+    // Setup wallet (non-connected)
+    const loadedWallet = Sniper.getWallet(walletName, options?.password);
+    this.wallet = loadedWallet.wallet;
+    this.walletAddress = loadedWallet.address;
+
+    this.chain = Sniper.getChainConfiguration(chainName);
+
+    const dex = this.chain.dexes.find((dex) => dex.name === this.chain.dex);
+
+    if (!dex) {
+      throw new Error(
+        `Selected DEX "${this.chain.dex}" does not exists in [[dexes]] configuration`,
+      );
+    }
+
+    this.dex = dex;
+
+    this.tokenAddress = tokenAddress;
+
+    // Setup RPC provider
+    this.rpcProviders = this.chain.rpc.map(
+      (url) => new providers.JsonRpcProvider(url),
+    );
+
+    // Setup connected Wallet
+    this.account = this.wallet.connect(this.rpcProviders[0]);
+
+    logger.debug(
+      {
+        ownerAddress: this.walletAddress,
+        tokenAddress: this.tokenAddress,
+        chain: {
+          name: this.chain.name,
+          rpc: this.chain.rpc[0],
+        },
+        dex: this.dex,
+      },
+      '[Finished] Initial bootstrapping',
+    );
+  }
+
+  getWallet() {
+    return this.wallet;
+  }
+
+  getAccount() {
+    return this.account;
+  }
+
+  getChainConfiguration() {
+    return this.chain;
+  }
+
+  getAllRpcProviders() {
+    return this.rpcProviders;
+  }
+
+  getRpcProvider() {
+    return this.getAllRpcProviders()[0];
+  }
+
+  async getRouter() {
+    if (this.dex.name === 'camelot') {
+      return Typechain.Router_arb_camelot__factory.connect(
+        this.dex.router,
+        this.account,
+      );
+    }
+
+    return Typechain.Router__factory.connect(this.dex.router, this.account);
+  }
+
+  async getFactory() {
+    let factoryAddress = this.dex.factory;
+
+    if (!factoryAddress || factoryAddress.length === 0) {
+      const router = await this.getRouter();
+
+      factoryAddress = await router.callStatic.factory();
+    }
+
+    return Typechain.Factory__factory.connect(factoryAddress, this.account);
+  }
+
+  async loadToken(address: string): Promise<Token> {
+    logger.debug(
+      {
+        address,
+      },
+      '[Started] Loading token',
+    );
+
+    const existing = this.tokens.get(address);
+
+    if (existing) {
+      return existing;
+    }
+
+    const contract = new Contract(address, ABI_ERC20, this.account);
+
+    const [name, symbol, decimals] = await Promise.all([
+      contract.callStatic.name(),
+      contract.callStatic.symbol(),
+      contract.callStatic.decimals(),
+    ]);
+
+    const token = {
+      address,
+      name,
+      symbol,
+      decimals:
+        typeof decimals === 'number'
+          ? decimals
+          : (decimals as BigNumber).toNumber(),
+      contract,
+    };
+
+    logger.debug(lodash.omit(token, ['contract']), '[Finished] Loading token');
+
+    this.tokens.set(address, token);
+
+    return token;
+  }
+
+  async loadSourceToken(address: string) {
+    logger.debug(
+      {
+        address,
+      },
+      '[Started] Loading source token',
+    );
+
+    const { sources } = this.chain;
+
+    const source = sources.find((source) => source.address === address);
+
+    if (!source) {
+      throw new Error(`Could not find source token with address "${address}"`);
+    }
+
+    const existing = this.sourceTokens.get(address);
+
+    if (existing) {
+      return existing;
+    }
+
+    const contract = new Contract(source.address, ABI_ERC20, this.account);
+
+    const symbol = await contract.callStatic.symbol();
+
+    const token = {
+      address: source.address,
+      name: source.name,
+      symbol,
+      decimals: source.decimals,
+      type: source.type,
+      minimumLp: source.minimumLp,
+      config: source,
+      contract,
+    };
+
+    logger.debug(
+      lodash.omit(token, ['config', 'contract']),
+      '[Finished] Loading source token',
+    );
+
+    this.sourceTokens.set(source.address, token);
+
+    return token as SourceToken;
+  }
+
+  async getReserveToken() {
+    const foundToken = this.chain.sources.find(
+      (source) => source.type === 'reserve',
+    );
+
+    if (!foundToken) {
+      throw new Error('Could not find reserve token');
+    }
+
+    return this.loadSourceToken(foundToken.address);
+  }
+
+  async getNativeToken() {
+    const foundToken = this.chain.sources.find(
+      (source) => source.type === 'native',
+    );
+
+    if (!foundToken) {
+      throw new Error('Could not find native token');
+    }
+
+    return this.loadSourceToken(foundToken.address);
+  }
+
+  async getStableToken() {
+    const foundToken = this.chain.sources.find(
+      (source) => source.type === 'stable',
+    );
+
+    if (!foundToken) {
+      throw new Error('Could not find native token');
+    }
+
+    return this.loadSourceToken(foundToken.address);
+  }
+
+  async getCheckableTokens() {
+    const foundTokens = this.chain.sources.filter((source) => source.check);
+
+    return Promise.all(
+      foundTokens.map((ft) => this.loadSourceToken(ft.address)),
+    );
+  }
+
+  async getTargetToken() {
+    return this.loadToken(this.tokenAddress);
+  }
+
+  async getToken(
+    nameTokenOrAddress: SourceTokenIdentifier,
+  ): Promise<SourceToken | Token> {
+    const isSourceToken = (
+      src: SourceToken | 'native' | 'stable' | string,
+    ): src is SourceToken => {
+      return !!(src as SourceToken).address;
+    };
+
+    if (isSourceToken(nameTokenOrAddress)) {
+      return nameTokenOrAddress;
+    }
+
+    if (nameTokenOrAddress === 'native') {
+      return this.getNativeToken();
+    }
+
+    if (nameTokenOrAddress === 'stable') {
+      return this.getStableToken();
+    }
+
+    if (nameTokenOrAddress.startsWith('0x')) {
+      return this.loadToken(nameTokenOrAddress);
+    }
+
+    throw new Error(
+      'You must supply an instance of SourceToken, "native", "stable" or 0x token address',
+    );
+  }
+
+  async getPair(source: SourceTokenIdentifier) {
+    const factory = await this.getFactory();
+
+    const token = await this.getToken(source);
+
+    const cacheKey = `${this.tokenAddress}::${token.address}`;
+
+    const cachedPair = this.pairs.get(cacheKey);
+
+    if (cachedPair) {
+      return cachedPair;
+    }
+
+    const address = (await factory.callStatic.getPair(
+      token.address,
+      this.tokenAddress,
+    )) as string;
+
+    if (address && !address.startsWith('0x0000000')) {
+      const liquidity = (await token.contract.callStatic.balanceOf(
+        address,
+      )) as BigNumber;
+
+      const pairContract = new Contract(address, ABI_PAIR, this.account);
+
+      const token0 = (await pairContract.callStatic.token0()) as string;
+
+      const targetToken = await this.getTargetToken();
+      const router = await this.getRouter();
+      const factory = await this.getFactory();
+
+      const pair = {
+        sourceToken: token as SourceToken,
+        targetToken: targetToken,
+        token0: token0 === token.address ? token : targetToken,
+        token1: token0 === token.address ? targetToken : token,
+        address,
+        contract: pairContract,
+        router,
+        factory,
+        liquidity,
+      };
+
+      this.pairs.set(cacheKey, pair);
+
+      return pair;
+    }
+
+    return undefined;
+  }
+
+  async getPairAmountsOut(
+    pair: Pair,
+    amount: BigNumberish,
+  ): Promise<[BigNumber, BigNumber]> {
+    const router = await this.getRouter();
+
+    const result = await router.functions.getAmountsOut(amount, [
+      pair.sourceToken.address,
+      pair.targetToken.address,
+    ]);
+
+    return result.amounts as [BigNumber, BigNumber];
+  }
+
+  async getPairWithLiquidity(ignoreMinimumLp?: boolean) {
+    const tokens = await this.getCheckableTokens();
+
+    logger.debug(
+      {
+        tokens: tokens.map((t) => ({
+          address: t.address,
+          name: t.name,
+        })),
+      },
+      '[Started] Finding pair with liquidity',
+    );
+
+    let found: Pair | null = null;
+
+    while (!found && tokens.length > 0) {
+      const token = tokens.shift()!;
+
+      const pair = await this.getPair(token);
+
+      if (!pair) {
+        continue;
+      }
+
+      const liquidityNumber = toEthersFloat(pair.liquidity);
+
+      logger.debug(
+        {
+          token: {
+            address: token.address,
+            name: token.name,
+          },
+          pair: pair.address,
+          liquidity: liquidityNumber,
+          minimumLiquidity: token.minimumLp,
+        },
+        '[Pending] Checking pair liquidity',
+      );
+
+      if (pair && (ignoreMinimumLp || liquidityNumber >= token.minimumLp)) {
+        found = pair;
+      }
+    }
+
+    if (!found) {
+      return undefined;
+    }
+
+    logger.debug(
+      {
+        sourceToken: {
+          address: found.sourceToken.address,
+          name: found.sourceToken.name,
+        },
+        token0: {
+          address: found.token0.address,
+          name: found.token0.name,
+        },
+        token1: {
+          address: found.token1.address,
+          name: found.token1.name,
+        },
+        pair: found.address,
+        liquidity: toEthersFloat(found.liquidity),
+      },
+      '[Finished] Finding pair with liquidity',
+    );
+
+    return found;
+  }
+
+  // Gets pair reserves and always ensures the source token is first
+  async getSourceFirstPairReserves(pair: Pair) {
+    const reserves = await pair.contract.callStatic.getReserves();
+
+    if (pair.token0.address === pair.sourceToken.address) {
+      return reserves;
+    }
+
+    return [reserves[1], reserves[0]];
+  }
+
+  async getPairAndInversePricePerSource(pair: Pair): Promise<[number, number]> {
+    const reserves = await pair.contract.callStatic.getReserves();
+
+    // We multiply & divide by 10 ** 6 to cover cases where there's
+    // less than 10 ** $decimals worth of reserves since BigNumber
+    // cant handle float/decimal values and rounds to 0
+
+    const reserve0 = reserves[0]
+      .mul(BigNumber.from(10).pow(6))
+      .div(BigNumber.from(10).pow(pair.token0.decimals));
+    const reserve1 = reserves[1]
+      .mul(BigNumber.from(10).pow(6))
+      .div(BigNumber.from(10).pow(pair.token1.decimals));
+
+    const number0 = reserve0.toNumber() / 10 ** 6;
+    const number1 = reserve1.toNumber() / 10 ** 6;
+
+    if (pair.token0.address === pair.sourceToken.address) {
+      return [number0 / number1, number1 / number0];
+    }
+
+    return [number1 / number0, number0 / number1];
+  }
+
+  async getPairPricePerSource(pair: Pair): Promise<number> {
+    const pricesPer = await this.getPairAndInversePricePerSource(pair);
+
+    return pricesPer[0];
+  }
+
+  async getNativeTokenBalance() {
+    return this.account.getBalance();
+  }
+
+  async getTokenBalance(
+    address: string,
+  ): Promise<{ balance: BigNumber; decimals: number }> {
+    const nativeToken = await this.getNativeToken();
+
+    if (address === nativeToken.address) {
+      const balance = await this.account.getBalance();
+
+      return {
+        balance,
+        decimals: nativeToken.decimals,
+      };
+    }
+
+    const targetToken = await this.getToken(address);
+
+    const result = await targetToken.contract.functions.balanceOf(
+      this.walletAddress,
+    );
+
+    return {
+      balance: result.balance,
+      decimals: targetToken.decimals,
+    };
+  }
+
+  async getTokenBalanceNumber(address: string): Promise<number> {
+    const result = await this.getTokenBalance(address);
+
+    return (
+      result.balance
+        .mul(BigNumber.from(10).pow(6))
+        .div(BigNumber.from(10).pow(result.decimals))
+        .toNumber() /
+      10 ** 6
+    );
+  }
+
+  async getTokenBalancePrice(
+    balance: BigNumberish,
+    inAddress: string,
+    outAddress: string,
+  ) {
+    const router = await this.getRouter();
+
+    const result = await router.functions.getAmountsOut(balance, [
+      inAddress,
+      outAddress,
+    ]);
+
+    return result.amounts[1] as BigNumber;
+  }
+
+  async getBlockNumber() {
+    return this.getRpcProvider().getBlockNumber();
+  }
+
+  async getLatestBlock() {
+    return this.getRpcProvider().getBlock('latest');
+  }
+
+  async getNextNonce() {
+    return this.account.getTransactionCount('pending');
+  }
+}

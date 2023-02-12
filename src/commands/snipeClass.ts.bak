@@ -1,0 +1,729 @@
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+import Web3 from 'web3';
+import StandardABI from 'human-standard-token-abi';
+import {
+  WALLET_EXTENSION_ENCRYPTED,
+  WALLET_EXTENSION_RAW,
+} from '../constants.js';
+import * as crypt from '../services/crypt.js';
+
+interface Wallet {
+  address: string;
+  password: string;
+}
+
+type Contract = InstanceType<Web3['eth']['Contract']>;
+
+const PATH_CHAINS_DIR = join(process.cwd(), 'configs', 'chains');
+const PATH_SWAPS = join(process.cwd(), 'configs', 'swaps.json');
+
+class ChainToken {
+  static async fromAddress(web3: Web3, address: string) {
+    const contract = new web3.eth.Contract(StandardABI, address);
+
+    const results = await Promise.all([
+      contract.methods.name().call() as Promise<string>,
+      contract.methods.decimals().call() as Promise<string>,
+      contract.methods.symbol().call() as Promise<string>,
+    ]);
+
+    return new ChainToken(
+      web3,
+      address,
+      results[0],
+      parseInt(results[1], 10),
+      results[2],
+    );
+  }
+
+  public readonly contract: Contract;
+
+  public readonly address: string;
+  public readonly name: string;
+  public readonly decimals: number;
+  public readonly symbol: string;
+
+  constructor(
+    web3: Web3,
+    address: string,
+    name: string,
+    decimals: number,
+    symbol: string,
+  ) {
+    this.contract = new web3.eth.Contract(StandardABI, address);
+
+    this.address = address;
+    this.name = name;
+    this.decimals = decimals;
+    this.symbol = symbol;
+  }
+}
+
+class ChainSourceToken {
+  private config: ChainConfigurationFromContract;
+  public readonly contract: Contract;
+
+  private meta: { name: string; decimals: number; symbol: string };
+
+  constructor(web3: Web3, config: ChainConfigurationFromContract) {
+    this.config = config;
+    this.contract = new web3.eth.Contract(StandardABI, config.address);
+
+    this.meta = {
+      name: this.config.name,
+      decimals: this.config.decimals,
+      symbol: this.config.name,
+    };
+
+    Promise.all([
+      this.contract.methods.name().call() as Promise<string>,
+      this.contract.methods.decimals().call() as Promise<number>,
+    ]).then(([name, decimals]) => {
+      this.meta = {
+        name,
+        decimals,
+        symbol: this.meta.symbol,
+      };
+    });
+  }
+
+  get address() {
+    return this.config.address;
+  }
+
+  get name() {
+    return this.meta.name;
+  }
+
+  get symbol() {
+    return this.meta.symbol;
+  }
+
+  get decimals() {
+    return this.meta.decimals;
+  }
+
+  get isNative() {
+    return this.config.isNative;
+  }
+
+  get isStable() {
+    return this.config.isStable;
+  }
+
+  get minimumLp() {
+    return this.config.lpThreshold;
+  }
+}
+
+class Chain {
+  private dex: Dex | undefined;
+
+  private rpc: Web3 | undefined;
+  private secondaryRpc: Web3 | undefined;
+  private socket: Web3 | undefined | null;
+
+  private sourceTokens: ChainSourceToken[];
+  private targetToken?: ChainToken;
+
+  static configurationFromName(name: string) {
+    const chainConfigurationPath = join(PATH_CHAINS_DIR, `${name}.json`);
+
+    if (!existsSync(chainConfigurationPath)) {
+      throw new Error(
+        `Could not open chain cnfig file "${chainConfigurationPath}" - please ensure it exists`,
+      );
+    }
+
+    const contents = readFileSync(chainConfigurationPath).toString();
+
+    return JSON.parse(contents) as ChainConfiguration;
+  }
+
+  private config: ChainConfiguration;
+
+  constructor(config: ChainConfiguration) {
+    this.config = config;
+    this.sourceTokens = config.fromContracts.map(
+      (from) => new ChainSourceToken(this.getRpc(), from),
+    );
+  }
+
+  get name() {
+    return this.config.chain.name;
+  }
+
+  get liquidityPoolAddresses() {
+    return this.config.fromContracts
+      .filter((from) => from.check)
+      .map((from) => from.address);
+  }
+
+  get rpcEndpoints() {
+    return ([] as string[]).concat(this.config.rpc);
+  }
+
+  getRpc() {
+    if (!this.rpc) {
+      this.rpc = new Web3(
+        new Web3.providers.HttpProvider(this.rpcEndpoints[0]),
+      );
+    }
+
+    return this.rpc;
+  }
+
+  getSecondaryRpc() {
+    if (!this.secondaryRpc) {
+      this.secondaryRpc = new Web3(
+        new Web3.providers.HttpProvider(
+          this.rpcEndpoints[1] || this.rpcEndpoints[0],
+        ),
+      );
+    }
+
+    return this.secondaryRpc;
+  }
+
+  getSocket() {
+    if (!this.config.wss) {
+      this.socket = null;
+    }
+
+    if (this.socket === undefined) {
+      this.socket = new Web3(
+        new Web3.providers.WebsocketProvider(this.config.wss, {
+          timeout: 30000,
+          clientConfig: {
+            maxReceivedFrameSize: 100000000,
+            maxReceivedMessageSize: 100000000,
+          },
+          reconnect: {
+            auto: true,
+            delay: 5000,
+            maxAttempts: 15,
+            onTimeout: false,
+          },
+        }),
+      );
+    }
+
+    return this.socket;
+  }
+
+  setDexName(name: string) {
+    this.dex = new Dex(Dex.configurationFromChainAndName(this.name, name));
+  }
+
+  getDex() {
+    if (!this.dex) {
+      throw new Error('No Dex has been set - please call setDexName() first');
+    }
+
+    return this.dex as Dex;
+  }
+
+  getSourceTokens() {
+    return this.sourceTokens;
+  }
+
+  getSourceToken(name: string) {
+    return this.getSourceTokens().find(
+      (token) => token.symbol.toLowerCase() === name.toLowerCase(),
+    );
+  }
+
+  getNativeToken() {
+    return this.getSourceTokens().find((token) => token.isNative);
+  }
+
+  async setTargetToken(address: string) {
+    this.targetToken = await ChainToken.fromAddress(this.getRpc(), address);
+  }
+
+  getTargetToken() {
+    return this.targetToken;
+  }
+}
+
+class Dex {
+  static configurationFromChainAndName(chain: string, name: string) {
+    const contents = readFileSync(PATH_SWAPS).toString();
+
+    const swaps: Swaps = JSON.parse(contents);
+
+    const swap = swaps.routers.find(
+      (sw) =>
+        sw.chain.toLowerCase() === chain && sw.name.toLowerCase() === name,
+    );
+
+    if (!swap) {
+      throw new Error(`Could not find DEX named "${name}" on chain "${chain}"`);
+    }
+
+    return swap as DexConfiguration;
+  }
+
+  private config: DexConfiguration;
+
+  constructor(config: DexConfiguration) {
+    this.config = config;
+  }
+
+  get routerName() {
+    return this.config.name;
+  }
+
+  get routerAddress() {
+    return this.config.routerAddress;
+  }
+
+  get pairContractAbi() {
+    return this.config.pairContractABI;
+  }
+
+  async getAnonymousRouter(web3: Web3) {
+    return new web3.eth.Contract(
+      this.config.routerABI,
+      this.config.routerAddress,
+    );
+  }
+
+  async getRouter(web3: Web3, forAccount: string) {
+    return new web3.eth.Contract(
+      this.config.routerABI,
+      this.config.routerAddress,
+      {
+        from: forAccount,
+      },
+    );
+  }
+
+  async getFactory(web3: Web3) {
+    let factoryAddress = this.config.factoryAddress;
+
+    if (!factoryAddress) {
+      const router = await this.getAnonymousRouter(web3);
+
+      factoryAddress = await router.methods.factory().call();
+    }
+
+    return new web3.eth.Contract(this.config.factoryABI, factoryAddress);
+  }
+
+  async getPairAddress(
+    web3: Web3,
+    addressA: string,
+    addressB: string,
+  ): Promise<string | undefined> {
+    const factory = await this.getFactory(web3);
+
+    return factory.methods.getPair(addressA, addressB).call();
+  }
+}
+
+export class Sniper {
+  static getWallet(walletName: string, password?: string): Wallet {
+    const inPath = join(
+      process.cwd(),
+      `${walletName}.${
+        password ? WALLET_EXTENSION_ENCRYPTED : WALLET_EXTENSION_RAW
+      }`,
+    );
+
+    if (!existsSync(inPath)) {
+      throw new Error(
+        `Could not open file "${inPath}" - please ensure it exists`,
+      );
+    }
+
+    const walletBuffer = readFileSync(inPath);
+
+    if (password) {
+      return JSON.parse(
+        crypt.decrypt(walletBuffer, password).toString('utf-8'),
+      );
+    }
+
+    return JSON.parse(walletBuffer.toString('utf-8'));
+  }
+
+  private wallet: Wallet;
+  private chain: Chain;
+
+  constructor(
+    walletName: string,
+    chainName: string,
+    dex: string,
+    options?: {
+      password?: string;
+      totalSpend?: number;
+      loopSpend?: number;
+      forceGas?: number;
+    },
+  ) {
+    this.wallet = Sniper.getWallet(walletName, options?.password);
+
+    this.chain = new Chain(Chain.configurationFromName(chainName));
+    this.chain.setDexName(dex);
+  }
+
+  getChain() {
+    return this.chain;
+  }
+
+  getSourceTokens() {
+    return this.chain.getSourceTokens();
+  }
+
+  getSourceTokenNames() {
+    return this.getSourceTokens().map((token) => token.name);
+  }
+
+  async setTargetToken(address: string) {
+    await this.chain.setTargetToken(address);
+  }
+
+  getTargetToken() {
+    return this.chain.getTargetToken();
+  }
+
+  async getPairAddress(sourceToken: ChainSourceToken | string) {
+    const source =
+      typeof sourceToken === 'string'
+        ? this.chain.getSourceToken(sourceToken)
+        : sourceToken;
+
+    if (!source) {
+      throw new Error('Invalid source token supplied');
+    }
+
+    const rpc = this.chain.getRpc();
+    const dex = this.chain.getDex();
+
+    const targetToken = this.getTargetToken();
+
+    if (!targetToken) {
+      throw new Error('No target token set - call setTargetToken() first');
+    }
+
+    return dex.getPairAddress(rpc, source.address, targetToken.address);
+  }
+
+  async getPairLiquidity(
+    sourceToken: ChainSourceToken | string,
+  ): Promise<string> {
+    const source =
+      typeof sourceToken === 'string'
+        ? this.chain.getSourceToken(sourceToken)
+        : sourceToken;
+
+    if (!source) {
+      throw new Error('Invalid source token supplied');
+    }
+
+    const pairAddress = await this.getPairAddress(source);
+
+    if (!pairAddress) {
+      throw new Error('No pair address found');
+    }
+
+    return source.contract.methods.balanceOf(pairAddress).call();
+  }
+
+  async getPairWithLiquidity() {
+    const [...sourceTokens] = this.chain.getSourceTokens();
+
+    let found: { token: ChainSourceToken; liquidity: number } | null = null;
+
+    while (!found && sourceTokens.length > 0) {
+      const token = sourceTokens.shift()!;
+
+      const liquidity = await this.getPairLiquidity(token);
+
+      if (liquidity) {
+        const parsedLiquidity = parseFloat(Web3.utils.fromWei(liquidity));
+
+        if (parsedLiquidity >= token.minimumLp) {
+          found = {
+            token,
+            liquidity: parsedLiquidity,
+          };
+        }
+      }
+    }
+
+    if (!found) {
+      return undefined;
+    }
+
+    return found;
+  }
+
+  /* async getDex() {
+    const web3 = this.getPrimaryClient();
+    const { dexConfiguration } = this;
+
+    const router = new web3.eth.Contract(
+      dexConfiguration.routerABI,
+      dexConfiguration.routerAddress,
+      {
+        from: this.walletConfiguration.address,
+      },
+    );
+
+    let factoryAddress = dexConfiguration.factoryAddress;
+
+    if (!factoryAddress || factoryAddress.length === 0) {
+      factoryAddress = await router.methods.factory().call();
+    }
+
+    const factory = new web3.eth.Contract(
+      dexConfiguration.factoryABI,
+      factoryAddress,
+    );
+
+    return {
+      router,
+      factory,
+      pairContractAbi: dexConfiguration.pairContractABI,
+      routerName: dexConfiguration.name,
+      routerAddress: dexConfiguration.routerAddress,
+    };
+  } */
+}
+
+type Snipe = (
+  walletName: string,
+  chain: string,
+  token: string,
+  dex: string,
+  options?: {
+    password?: string;
+    totalSpend?: number;
+    loopSpend?: number;
+    forceGas?: number;
+  },
+) => Promise<void>;
+
+const snipe: Snipe = async (
+  walletName,
+  chainName,
+  tokenAddress,
+  dexName,
+  options,
+) => {
+  const sniper = new Sniper(walletName, chainName, dexName, options);
+
+  await sniper.setTargetToken(tokenAddress);
+
+  const liquidityToken = await sniper.getPairWithLiquidity();
+
+  const inputToken = sniper.getTargetToken();
+
+  if (liquidityToken) {
+    console.log('=== Input token', {
+      name: inputToken?.name,
+      symbol: inputToken?.symbol,
+      decimals: inputToken?.decimals,
+    });
+    console.log(
+      '=== Pair address',
+      await sniper.getPairAddress(liquidityToken.token.symbol),
+    );
+    console.log('=== Getting pair liquidity', {
+      liquidity: liquidityToken.liquidity,
+      token: {
+        name: liquidityToken.token.name,
+        symbol: liquidityToken.token.symbol,
+        decimals: liquidityToken.token.decimals,
+      },
+    });
+  }
+
+  /* console.log(
+    await factory.methods
+      .getPair(
+        sniper.getChain().getToken('busd')?.address,
+        sniper.getTargetToken()?.address,
+      )
+      .call(console.log),
+  ); */
+
+  // console.log(sniper.getTargetToken());
+};
+
+/* const getWallet = (
+  walletName: string,
+  password?: string,
+): { address: string; password: string } => {
+  const inPath = join(
+    process.cwd(),
+    `${walletName}.${
+      password ? WALLET_EXTENSION_ENCRYPTED : WALLET_EXTENSION_RAW
+    }`,
+  );
+
+  if (!existsSync(inPath)) {
+    throw new Error(
+      `Could not open file "${inPath}" - please ensure it exists`,
+    );
+  }
+
+  const walletBuffer = readFileSync(inPath);
+
+  if (password) {
+    return JSON.parse(crypt.decrypt(walletBuffer, password).toString('utf-8'));
+  }
+
+  return JSON.parse(walletBuffer.toString('utf-8'));
+};
+
+const getChainConfiguration = (name: string) => {
+  const ChainConfigurationPath = join(PATH_CHAINS_DIR, `${name}.json`);
+
+  if (!existsSync(ChainConfigurationPath)) {
+    throw new Error(
+      `Could not open chain cnfig file "${ChainConfigurationPath}" - please ensure it exists`,
+    );
+  }
+
+  const contents = readFileSync(ChainConfigurationPath).toString();
+
+  return JSON.parse(contents) as ChainConfiguration;
+};
+
+const getClients = (rpcs: string[], wss?: string) => ({
+  primary: new Web3(new Web3.providers.HttpProvider(rpcs[0])),
+  secondary: new Web3(new Web3.providers.HttpProvider(rpcs[1] || rpcs[0])),
+  socket: wss
+    ? new Web3(
+        new Web3.providers.WebsocketProvider(wss, {
+          timeout: 30000,
+          clientConfig: {
+            maxReceivedFrameSize: 100000000,
+            maxReceivedMessageSize: 100000000,
+          },
+          reconnect: {
+            auto: true,
+            delay: 5000,
+            maxAttempts: 15,
+            onTimeout: false,
+          },
+        }),
+      )
+    : undefined,
+});
+
+const getDex = async (
+  web3: Web3,
+  account: string,
+  chain: string,
+  dex: string,
+) => {
+  const contents = readFileSync(PATH_SWAPS).toString();
+
+  const swaps: Swaps = JSON.parse(contents);
+
+  const swap = swaps.routers.find(
+    (sw) => sw.chain.toLowerCase() === chain && sw.name.toLowerCase() === dex,
+  );
+
+  if (!swap) {
+    throw new Error(`Could not find DEX named "${dex}" on chain "${chain}"`);
+  }
+
+  const router = new web3.eth.Contract(swap.routerABI, swap.routerAddress, {
+    from: account,
+  });
+
+  let factoryAddress = swap.factoryAddress;
+
+  if (!factoryAddress || factoryAddress.length === 0) {
+    factoryAddress = await router.methods.factory().call();
+  }
+
+  const factory = new web3.eth.Contract(swap.factoryABI, factoryAddress);
+
+  return {
+    router,
+    factory,
+    pairContractAbi: swap.pairContractABI,
+    routerName: swap.name,
+    routerAddress: swap.routerAddress,
+  };
+};
+
+const snipe: Snipe = async (walletName, chainName, token, dexName, options) => {
+  const walletConfig = getWallet(walletName, options?.password);
+  console.log(`[snipe] :: Loaded wallet with address: ${walletConfig.address}`);
+
+  const ChainConfiguration = getChainConfiguration(chainName);
+  console.log(`[snipe] :: Loaded chain config for chain: ${chainName}`);
+
+  const clients = getClients(
+    ([] as string[]).concat(ChainConfiguration.rpc),
+    ChainConfiguration.wss,
+  );
+  console.log(`[snipe] :: Loaded chain clients`);
+  console.log(
+    `[snipe] :: Loaded WebSocket chain client: ${
+      clients.socket ? 'YES' : 'NO'
+    }`,
+  );
+
+  const web3 = clients.primary;
+
+  const dex = await getDex(
+    web3,
+    walletConfig.address,
+    ChainConfiguration.chain.name,
+    dexName,
+  );
+  console.log(`[snipe] :: Loaded Dex`, dex);
+
+  const liquidityPoolAddresses = ChainConfiguration.fromContracts
+    .filter((from) => from.check)
+    .map((from) => from.address);
+
+  const sourceContracts = ChainConfiguration.fromContracts.map((from) => {
+    const contract = new web3.eth.Contract(StandardABI, from.address);
+
+    return {
+      contract,
+      honeySpend: from.honeySpend
+        ? from.honeySpend
+        : 1 * Math.pow(10, from.decimals - 2),
+      liquidity: false,
+      native: from.isNative
+        ? {
+            config: from,
+            approve: from.approve,
+          }
+        : null,
+      stable: from.isStable
+        ? {
+            config: from,
+            approve: from.approve,
+          }
+        : null,
+      reserve: from.isReserve
+        ? {
+            config: from,
+          }
+        : null,
+      totalSpend:
+        options?.totalSpend && options.totalSpend > 0
+          ? options.totalSpend
+          : from.totalSpend,
+      loopSpend:
+        options?.loopSpend && options.loopSpend > 0
+          ? options.loopSpend
+          : from.loopSpend,
+      gas: options?.forceGas && options.forceGas > 0 ? options.forceGas : null,
+    };
+  });
+}; */
+
+export default snipe;
