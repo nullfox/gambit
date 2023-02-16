@@ -1,8 +1,23 @@
-import { BigNumber, ethers } from 'ethers';
+import { ethers } from 'ethers';
+import Notifier from 'node-notifier';
 import pino from 'pino';
 import readline from 'readline';
 
+import Pair from '../libs/pair.js';
 import Sniper from '../libs/sniper.js';
+
+type TransactionRecipt = Awaited<
+  ReturnType<
+    typeof ethers.providers.JsonRpcProvider.prototype.getTransactionReceipt
+  >
+>;
+
+interface TransactionExceptionError {
+  code: 0;
+  receipt: TransactionRecipt;
+}
+
+type TransactionError = TransactionExceptionError;
 
 type Snipe = (
   walletName: string,
@@ -36,11 +51,36 @@ const snipe: Snipe = async (
     options,
   );
 
-  const pair = await sniper.findOperatingPair();
+  const targetToken = await sniper.getTargetToken();
+  const checkableTokens = await sniper.getCheckableTokens();
 
-  if (!pair) {
-    throw new Error('Could not find a pair with liquidity');
-  }
+  const findPairLoop = async (): Promise<Pair> => {
+    const loopTimeoutSeconds = 10;
+
+    const pair = await sniper.findOperatingPair();
+
+    if (!pair) {
+      logger.info(
+        `Could not find liquidity for "${
+          targetToken.name
+        }" against ${checkableTokens
+          .map((ct) => `"${ct.name}"`)
+          .join(
+            ', ',
+          )} - sleeping and checking again in ${loopTimeoutSeconds} seconds`,
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, loopTimeoutSeconds * 1000),
+      );
+
+      return findPairLoop();
+    }
+
+    return pair;
+  };
+
+  const pair = await findPairLoop();
 
   // ////////////////////////////////////////
   // INTERACTIVE PROMPT
@@ -158,15 +198,36 @@ const snipe: Snipe = async (
       if (answer === 'sa') {
         const receipt = await pair.sellPercent(100);
 
+        Notifier.notify({
+          title: `Sold all "${targetToken.name}"`,
+          open: `${explorer}/tx/${receipt.transactionHash}`,
+          sound: true,
+          wait: true,
+        });
+
         console.log('==== Transaction mined');
         console.dir(receipt, { depth: null, maxArrayLength: null });
       } else if (answer.startsWith('s')) {
         const receipt = await pair.sellPercent(parseFloat(answer.slice(1)));
 
+        Notifier.notify({
+          title: `Sold "${targetToken.name}"`,
+          open: `${explorer}/tx/${receipt.transactionHash}`,
+          sound: true,
+          wait: true,
+        });
+
         console.log('==== Transaction mined');
         console.dir(receipt, { depth: null, maxArrayLength: null });
       } else {
         const receipt = await pair.buy(parseFloat(answer.slice(1)));
+
+        Notifier.notify({
+          title: `Bought "${targetToken.name}"`,
+          open: `${explorer}/tx/${receipt.transactionHash}`,
+          sound: true,
+          wait: true,
+        });
 
         console.log('==== Transaction mined');
         console.dir(receipt, { depth: null, maxArrayLength: null });
@@ -179,6 +240,7 @@ const snipe: Snipe = async (
   // ////////////////////////////////////////
 
   const { totalSpend, spendPerLoop } = pair.getSourceToken().config;
+  const explorer = sniper.getChainConfiguration().explorer;
 
   if (totalSpend > 0 && (!spendPerLoop || spendPerLoop === 0)) {
     logger.info(
@@ -188,10 +250,17 @@ const snipe: Snipe = async (
       'Entering automatic mode - total spend set',
     );
 
-    const transaction = await pair.buy(totalSpend);
+    const receipt = await pair.buy(totalSpend);
+
+    Notifier.notify({
+      title: `Bought "${targetToken.name}"`,
+      open: `${explorer}/tx/${receipt.transactionHash}`,
+      sound: true,
+      wait: true,
+    });
 
     console.log('==== Transaction mined');
-    console.dir(transaction, { depth: null, maxArrayLength: null });
+    console.dir(receipt, { depth: null, maxArrayLength: null });
   } else if (totalSpend && spendPerLoop && spendPerLoop > 0) {
     logger.info(
       {
@@ -207,7 +276,51 @@ const snipe: Snipe = async (
       throw new Error(`Loop time "${loopTime}" should not be less than 1`);
     }
 
-    const totalSpent = 0;
+    let errorCount = 0;
+    const maxErrorCount = sniper.getChainConfiguration().misc.maxErrorCount;
+
+    let totalSpent = 0;
+
+    while (totalSpent < totalSpend) {
+      if (errorCount >= maxErrorCount) {
+        logger.fatal(
+          {
+            maxErrorCount,
+          },
+          'Reached max error count - exiting',
+        );
+
+        process.exit(1);
+      }
+
+      try {
+        const receipt = await pair.buy(spendPerLoop);
+        totalSpent += spendPerLoop;
+
+        Notifier.notify({
+          title: `Bought "${targetToken.name}"`,
+          open: `${explorer}/tx/${receipt.transactionHash}`,
+          sound: true,
+          wait: true,
+        });
+      } catch (error) {
+        const transactionError = error as TransactionError;
+
+        // CALL_EXCEPTION
+        if (transactionError.code === 0) {
+          logger.error(
+            {
+              error,
+            },
+            'Got error in loop spend mode - will continue trying',
+          );
+
+          errorCount += 1;
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, loopTime * 1000));
+    }
 
     // TODO: Loop spend
   } else {

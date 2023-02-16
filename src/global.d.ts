@@ -29,6 +29,7 @@ interface ChainConfiguration {
   rpc: string[];
   wss?: string;
   dex: string;
+  explorer: string;
 
   buy: {
     slippage: number;

@@ -5,6 +5,8 @@ rpc = ["https://arb1.arbitrum.io/rpc"]
 # Uncoment if you have a WSS url
 # wss = ""
 dex = "camelot"
+# Should be etherscan, bscscan, arbiscan-esque compatible explorers
+explorer = "https://arbiscan.io"
 
 [buy]
 slippage = 1
@@ -36,13 +38,18 @@ name = "camelot"
 router = "0xc873fecbd354f5a56e00e710b90ef4201db2448d"
 factory = "0x6EcCab422D763aC031210895C81787E87B43A652"
 
+[[dexes]]
+name = "lizard"
+router = "0xf26515d5482e2c2fd237149bf6a653da4794b3d0"
+factory = "0x734d84631f00dc0d3fcd18b04b6cf42bfd407074"
+
 # Add additional source tokens here
 # type = native | stable | reserve
 [[sources]]
 name = "AETH"
 decimals = 18
 address = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
-minimumLp = 0
+minimumLp = 10
 totalSpend = 0
 # Uncomment if you want looped spending
 # spendPerLoop = 0
@@ -58,6 +65,6 @@ minimumLp = 100
 totalSpend = 0
 # Uncomment if you want looped spending
 # spendPerLoop = 0
-check = false
+check = true
 approve = true
 type= "stable"

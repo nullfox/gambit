@@ -12,6 +12,11 @@ import * as crypt from '../services/crypt.js';
 import Chain from './chain.js';
 import Pair from './pair.js';
 
+type FoundLiquidityPair = {
+  pair: Pair;
+  liquidity: number;
+};
+
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
 });
@@ -103,6 +108,14 @@ export default class Sniper {
     return this.chain.getConfiguration();
   }
 
+  async getCheckableTokens() {
+    return this.chain.getCheckableTokens();
+  }
+
+  async getTargetToken() {
+    return this.chain.getToken(this.tokenAddress);
+  }
+
   async findOperatingPair(ignoreMinimumLp?: boolean) {
     const checkableTokens = await this.chain.getCheckableTokens();
 
@@ -121,15 +134,13 @@ export default class Sniper {
       '[Started] Finding pair with liquidity',
     );
 
-    let found: Pair | null = null;
-
-    while (!found && sourceTokens.length > 0) {
-      const token = sourceTokens.shift()!;
-
+    const getPair = async (
+      token: SourceToken,
+    ): Promise<FoundLiquidityPair | undefined> => {
       const pair = await this.chain.getDex().getPair(token, targetToken);
 
       if (!pair) {
-        continue;
+        return undefined;
       }
 
       const liquidityNumber = await pair.getLiquidityNumber();
@@ -148,13 +159,36 @@ export default class Sniper {
       );
 
       if (pair && (ignoreMinimumLp || liquidityNumber >= token.minimumLp)) {
-        found = pair;
+        return {
+          pair,
+          liquidity: liquidityNumber,
+        };
       }
+
+      return undefined;
+    };
+
+    const pairs = await Promise.all(sourceTokens.map((st) => getPair(st)));
+
+    const liquidPairs = pairs.filter((p): p is FoundLiquidityPair => !!p?.pair);
+
+    if (liquidPairs.length === 0) {
+      return null;
     }
 
-    if (!found) {
-      return undefined;
+    let foundPair: FoundLiquidityPair = liquidPairs[0];
+
+    if (liquidPairs.length > 1) {
+      const pairLiquidities = liquidPairs.map((lp) => lp.liquidity);
+
+      const maxLiquidity = Math.max(...pairLiquidities);
+
+      const index = pairLiquidities.indexOf(maxLiquidity);
+
+      foundPair = liquidPairs[index];
     }
+
+    const found = foundPair.pair;
 
     const liquidityNumber = await found.getLiquidityNumber();
 
