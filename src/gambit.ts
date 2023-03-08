@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-
 import { Command } from 'commander';
-import decrypt from './commands/decrypt.js';
-import encrypt from './commands/encrypt.js';
+
+import setupWallet from './commands/setupWallet.js';
 import snipe from './commands/snipe.js';
 
 const program = new Command();
@@ -15,11 +14,11 @@ program
     'Name of the wallet file WITHOUT extension (ex: my-key)',
   )
   .argument('<chain>', 'Chain configuration to use (ex: wallet_bsc)')
+  .argument('<dex>', 'DEX name to use (ex: pancake)')
   .argument(
     '<token>',
     'Target token to snipe (ex: 0x522d0f9f3eff479a5b256bb1c1108f47b8e1a153)',
   )
-  .argument('<dex>', 'DEX name to use (ex: pancake)')
   .option(
     '-t, --totalSpend <number>',
     'Total amount of reserve token to spend',
@@ -35,44 +34,33 @@ program
   .action(snipe);
 
 program
-  .command('encrypt')
-  .description('Encrypt wallet file')
+  .command('setup-wallet')
+  .description('Setup new wallet for Gambit')
   .argument(
     '<walletName>',
     'Name of the wallet file WITHOUT extension (ex: my-key)',
   )
   .argument('<password>', 'Password to encrypt key file with')
+  .argument('<address>', 'Your wallet address (ex: 0x78...)')
+  .argument('<secretKey>', 'Secret key associated to your wallet')
   .option('-f, --force [boolean]', 'Force existing file deletion', false)
   .action(
     async (
       walletName: string,
       password: string,
+      address: string,
+      secretKey: string,
       options: { force?: boolean },
     ) => {
-      const path = await encrypt(walletName, password, options.force);
+      const path = await setupWallet(
+        walletName,
+        password,
+        address,
+        secretKey,
+        options.force,
+      );
 
       console.log(`Encrypted wallet file to path: ${path}`);
-    },
-  );
-
-program
-  .command('decrypt')
-  .description('Decrypt wallet file')
-  .argument(
-    '<walletName>',
-    'Name of the wallet file WITHOUT extension (ex: my-key)',
-  )
-  .argument('<password>', 'Password to encrypt key file with')
-  .option('-f, --force [boolean]', 'Force existing file deletion', false)
-  .action(
-    async (
-      walletName: string,
-      password: string,
-      options: { force?: boolean },
-    ) => {
-      const path = decrypt(walletName, password, options.force);
-
-      console.log(`Decrypted wallet file to path: ${path}`);
     },
   );
 

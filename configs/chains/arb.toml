@@ -21,7 +21,7 @@ gas = 1469174
 [misc]
 loopTimeInSeconds = 1
 refreshInteractive = true
-interactiveRefreshInSeconds = 5
+interactiveRefreshInSeconds = 10
 approveTo = false
 maxErrorCount = 3
 toContracts = [ ]

@@ -22,8 +22,8 @@ type TransactionError = TransactionExceptionError;
 type Snipe = (
   walletName: string,
   chain: string,
-  token: string,
   dex: string,
+  token: string,
   options?: {
     password?: string;
     totalSpend?: number;
@@ -39,8 +39,8 @@ const logger = pino({
 const snipe: Snipe = async (
   walletName,
   chainName,
-  tokenAddress,
   dexName,
+  tokenAddress,
   options,
 ) => {
   const sniper = new Sniper(
@@ -55,7 +55,7 @@ const snipe: Snipe = async (
   const checkableTokens = await sniper.getCheckableTokens();
 
   const findPairLoop = async (): Promise<Pair> => {
-    const loopTimeoutSeconds = 10;
+    const loopTimeoutSeconds = 5;
 
     const pair = await sniper.findOperatingPair();
 
@@ -184,7 +184,7 @@ const snipe: Snipe = async (
       prompt.close();
 
       // Handle bad response
-      if (!/^b\d+|sa|s\d+$/.test(answer)) {
+      if (!/^b\d+(\.\d+)?|sa|s\d+(\.\d+)?$/.test(answer)) {
         console.log(
           'Response must be in the form of "b2000", "sa" or "s50" - please try again',
         );
@@ -242,7 +242,11 @@ const snipe: Snipe = async (
   const { totalSpend, spendPerLoop } = pair.getSourceToken().config;
   const explorer = sniper.getChainConfiguration().explorer;
 
-  if (totalSpend > 0 && (!spendPerLoop || spendPerLoop === 0)) {
+  const resolvedTotalSpend = options?.totalSpend
+    ? options.totalSpend
+    : totalSpend;
+
+  if (resolvedTotalSpend > 0 && (!spendPerLoop || spendPerLoop === 0)) {
     logger.info(
       {
         totalSpend,
@@ -250,7 +254,7 @@ const snipe: Snipe = async (
       'Entering automatic mode - total spend set',
     );
 
-    const receipt = await pair.buy(totalSpend);
+    const receipt = await pair.buy(resolvedTotalSpend);
 
     Notifier.notify({
       title: `Bought "${targetToken.name}"`,

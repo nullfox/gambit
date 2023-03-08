@@ -31,8 +31,6 @@ class EncryptStream extends Transform {
   ): void {
     const message = chunk.toString();
 
-    console.log('=== HERRO', message);
-
     callback(null, crypt.encrypt(message, this.password));
   }
 }
