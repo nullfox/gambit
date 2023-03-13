@@ -8,6 +8,22 @@ import {
 } from '../constants.js';
 import * as Typechain from '../typechain/index.js';
 import Dex from './dex.js';
+import Camelot from './dex/camelot.js';
+import Primary from './dex/primary.js';
+
+const pairAdapters = {
+  camelot: Camelot,
+};
+
+const getPairAdapter = (dexName: string, pair: Pair) => {
+  if (!Object.keys(pairAdapters).includes(dexName)) {
+    return new Primary(pair);
+  }
+
+  const Adapter = pairAdapters[dexName as keyof typeof pairAdapters];
+
+  return new Adapter(pair);
+};
 
 export default class Pair {
   private contract: Typechain.Pair;
@@ -70,12 +86,18 @@ export default class Pair {
     return this.token1;
   }
 
+  getWallet() {
+    return this.wallet;
+  }
+
   async getLiquidity() {
     if (!this.liquidity) {
       this.liquidity = await this.sourceToken.contract.callStatic.balanceOf(
         this.contract.address,
       );
     }
+
+    console.log('=== This liq', this.liquidity.toString());
 
     return this.liquidity;
   }
@@ -204,38 +226,23 @@ export default class Pair {
     let estimatedGas = BigNumber.from(0);
     let gas = BigNumber.from(gasLimit);
 
-    const router = this.dex.getRouter();
+    const pairAdapter = getPairAdapter(this.dex.getName(), this);
 
     if (this.sourceToken.type === 'native') {
       transactionValue = inputTokenAmount;
 
-      estimatedGas =
-        await router.estimateGas.swapExactETHForTokensSupportingFeeOnTransferTokens(
-          amountOutMin,
-          [this.sourceToken.address, this.targetToken.address],
-          this.wallet.address,
-          '0x0000000000000000000000000000000000000000',
-          Date.now() + 1000 * 60 * 10,
-          {
-            value: transactionValue,
-            gasPrice,
-            gasLimit,
-          },
-        );
+      estimatedGas = await pairAdapter.buyNative(amountOutMin).estimate({
+        value: transactionValue,
+        gasPrice,
+        gasLimit,
+      });
     } else {
-      estimatedGas =
-        await router.estimateGas.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-          inputTokenAmount,
-          amountOutMin,
-          [this.sourceToken.address, this.targetToken.address],
-          this.wallet.address,
-          '0x0000000000000000000000000000000000000000',
-          Date.now() + 1000 * 60 * 10,
-          {
-            gasPrice,
-            gasLimit,
-          },
-        );
+      estimatedGas = await pairAdapter
+        .buy(inputTokenAmount, amountOutMin)
+        .estimate({
+          gasPrice,
+          gasLimit,
+        });
     }
 
     gas = estimatedGas;
@@ -303,38 +310,21 @@ export default class Pair {
     );
 
     if (this.sourceToken.type === 'native') {
-      const tx =
-        await router.functions.swapExactETHForTokensSupportingFeeOnTransferTokens(
-          amountOutMin,
-          [this.sourceToken.address, this.targetToken.address],
-          this.wallet.address,
-          '0x0000000000000000000000000000000000000000',
-          Date.now() + 1000 * 60 * 10,
-          {
-            value: transactionValue,
-            gasPrice,
-            gasLimit,
-            nonce,
-          },
-        );
+      const tx = await pairAdapter.buyNative(amountOutMin).execute({
+        value: transactionValue,
+        gasPrice,
+        gasLimit: gas,
+        nonce,
+      });
 
       return tx.wait();
     }
 
-    const tx =
-      await router.functions.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-        inputTokenAmount,
-        amountOutMin,
-        [this.sourceToken.address, this.targetToken.address],
-        this.wallet.address,
-        '0x0000000000000000000000000000000000000000',
-        Date.now() + 1000 * 60 * 10,
-        {
-          gasPrice,
-          gasLimit,
-          nonce,
-        },
-      );
+    const tx = await pairAdapter.buy(inputTokenAmount, amountOutMin).execute({
+      gasPrice,
+      gasLimit: gas,
+      nonce,
+    });
 
     return tx.wait();
   }
@@ -371,6 +361,8 @@ export default class Pair {
 
     const router = this.dex.getRouter();
 
+    const pairAdapter = getPairAdapter(this.dex.getName(), this);
+
     const allowance = await this.approveTargetToken();
 
     console.log('=== SELL', {
@@ -385,33 +377,19 @@ export default class Pair {
     if (this.sourceToken.type === 'native') {
       transactionValue = inputTokenAmount;
 
-      estimatedGas =
-        await router.estimateGas.swapExactTokensForETHSupportingFeeOnTransferTokens(
-          inputTokenAmount,
-          amountOutMin,
-          [this.targetToken.address, this.sourceToken.address],
-          this.wallet.address,
-          '0x0000000000000000000000000000000000000000',
-          Date.now() + 1000 * 60 * 10,
-          {
-            gasPrice,
-            gasLimit,
-          },
-        );
+      estimatedGas = await pairAdapter
+        .sellNative(inputTokenAmount, amountOutMin)
+        .estimate({
+          gasPrice,
+          gasLimit,
+        });
     } else {
-      estimatedGas =
-        await router.estimateGas.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-          inputTokenAmount,
-          amountOutMin,
-          [this.targetToken.address, this.sourceToken.address],
-          this.wallet.address,
-          '0x0000000000000000000000000000000000000000',
-          Date.now() + 1000 * 60 * 10,
-          {
-            gasPrice,
-            gasLimit,
-          },
-        );
+      estimatedGas = await pairAdapter
+        .sell(inputTokenAmount, amountOutMin)
+        .estimate({
+          gasPrice,
+          gasLimit,
+        });
     }
 
     gas = estimatedGas;
@@ -479,38 +457,22 @@ export default class Pair {
     );
 
     if (this.sourceToken.type === 'native') {
-      const tx =
-        await router.functions.swapExactTokensForETHSupportingFeeOnTransferTokens(
-          inputTokenAmount,
-          amountOutMin,
-          [this.targetToken.address, this.sourceToken.address],
-          this.wallet.address,
-          '0x0000000000000000000000000000000000000000',
-          Date.now() + 1000 * 60 * 10,
-          {
-            gasPrice,
-            gasLimit,
-            nonce,
-          },
-        );
+      const tx = await pairAdapter
+        .sellNative(inputTokenAmount, amountOutMin)
+        .execute({
+          gasPrice,
+          gasLimit,
+          nonce,
+        });
 
       return tx.wait();
     }
 
-    const tx =
-      await router.functions.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-        inputTokenAmount,
-        amountOutMin,
-        [this.targetToken.address, this.sourceToken.address],
-        this.wallet.address,
-        '0x0000000000000000000000000000000000000000',
-        Date.now() + 1000 * 60 * 10,
-        {
-          gasPrice,
-          gasLimit,
-          nonce,
-        },
-      );
+    const tx = await pairAdapter.sell(inputTokenAmount, amountOutMin).execute({
+      gasPrice,
+      gasLimit,
+      nonce,
+    });
 
     return tx.wait();
   }

@@ -1,6 +1,7 @@
 type Router = import('./typechain/index').Router;
 type RouterArbCamelot = import('./typechain/index').Router_arb_camelot;
 type Erc20 = import('./typechain/index').Erc20;
+type BigNumberish = import('ethers').BigNumberish;
 
 type ChainConfigurationSourceType = 'native' | 'stable' | 'reserve';
 
@@ -77,3 +78,12 @@ interface SourceToken extends Token {
 }
 
 type SourceTokenIdentifier = SourceToken | 'native' | 'stable' | string;
+
+interface DexOptions {
+  gasLimit: BigNumberish;
+  gasPrice: BigNumberish;
+}
+
+interface DexNonceOptions extends DexOptions {
+  nonce: BigNumberish;
+}
