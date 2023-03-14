@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "lib/index.js",
-  "bin": {
-    "gambit": "./gambit.js"
-  },
+  "bin": "./gambit.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -41,15 +39,5 @@
     "pino": "^8.9.0",
     "pino-pretty": "^9.1.1",
     "toml": "^3.0.0"
-  },
-  "pkg": {
-    "scripts": "esbuilt/*.js",
-    "assets": [
-      "configs/"
-    ],
-    "targets": [
-      "node18-macos-x64"
-    ],
-    "outputPath": "binaries"
   }
 }

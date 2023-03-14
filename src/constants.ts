@@ -14,3 +14,5 @@ export const GAS_LIMIT_THRESHOLD = 60;
 
 // As percent
 export const GAS_MULTIPLIER = 1.4;
+
+export const LOG_LEVEL = process.env.LOG_LEVEL || 'warn';

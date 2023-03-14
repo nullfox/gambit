@@ -1,9 +1,10 @@
 import { Wallet } from 'ethers';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import pino from 'pino';
+import pino, { Logger } from 'pino';
 
 import {
+  LOG_LEVEL,
   WALLET_DIR,
   WALLET_EXTENSION_ENCRYPTED,
   WALLET_EXTENSION_RAW,
@@ -16,10 +17,6 @@ type FoundLiquidityPair = {
   pair: Pair;
   liquidity: number;
 };
-
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-});
 
 export default class Sniper {
   static getWallet(walletName: string, password?: string) {
@@ -61,6 +58,8 @@ export default class Sniper {
   private chain: Chain;
   private tokenAddress: string;
 
+  private logger: Logger;
+
   constructor(
     walletName: string,
     chainName: string,
@@ -83,7 +82,12 @@ export default class Sniper {
       dex: dexName,
     });
 
-    logger.debug(
+    this.logger = pino({
+      name: 'class::sniper',
+      level: LOG_LEVEL,
+    });
+
+    this.logger.debug(
       {
         tokenAddress: this.tokenAddress,
         chain: {
@@ -124,7 +128,7 @@ export default class Sniper {
 
     const targetToken = await this.chain.getToken(this.tokenAddress);
 
-    logger.debug(
+    this.logger.debug(
       {
         tokens: sourceTokens.map((t) => ({
           address: t.address,
@@ -145,7 +149,7 @@ export default class Sniper {
 
       const liquidityNumber = await pair.getLiquidityNumber();
 
-      logger.debug(
+      this.logger.debug(
         {
           token: {
             address: token.address,
@@ -192,7 +196,7 @@ export default class Sniper {
 
     const liquidityNumber = await found.getLiquidityNumber();
 
-    logger.debug(
+    this.logger.debug(
       {
         sourceToken: {
           address: found.getSourceToken().address,

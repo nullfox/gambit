@@ -5,6 +5,7 @@ import {
   BP_DIVISOR,
   GAS_LIMIT_THRESHOLD,
   GAS_MULTIPLIER,
+  LOG_LEVEL,
 } from '../constants.js';
 import * as Typechain from '../typechain/index.js';
 import Dex from './dex.js';
@@ -58,7 +59,7 @@ export default class Pair {
 
     this.logger = pino({
       name: 'class::pair',
-      level: process.env.LOG_LEVEL || 'info',
+      level: LOG_LEVEL,
     });
   }
 
@@ -96,8 +97,6 @@ export default class Pair {
         this.contract.address,
       );
     }
-
-    console.log('=== This liq', this.liquidity.toString());
 
     return this.liquidity;
   }
@@ -359,8 +358,6 @@ export default class Pair {
     let estimatedGas = BigNumber.from(0);
     let gas = BigNumber.from(gasLimit);
 
-    const router = this.dex.getRouter();
-
     const pairAdapter = getPairAdapter(this.dex.getName(), this);
 
     const allowance = await this.approveTargetToken();
@@ -483,8 +480,6 @@ export default class Pair {
     const balanceNumber = parseFloat(
       ethers.utils.formatUnits(balance, this.targetToken.decimals),
     );
-
-    console.log('=== Balance', balanceNumber, balanceNumber * (percent / 100));
 
     return this.sell(balanceNumber * (percent / 100));
   }

@@ -8,6 +8,17 @@ const program = new Command();
 
 program
   .command('snipe')
+  .addHelpText(
+    'after',
+    `
+
+Example interactive call:
+./gambit snipe mainWallet arb camelot 0x522... --password sup3rS3cr3tP4ssw0rd
+
+Example automated call:
+./gambit snipe mainWallet arb camelot 0x522... --password=sup3rS3cr3tP4ssw0rd --totalSpend="0.01"
+`,
+  )
   .description('Snipe token LP')
   .argument(
     '<walletName>',
@@ -35,6 +46,14 @@ program
 
 program
   .command('setup-wallet')
+  .addHelpText(
+    'after',
+    `
+
+Example call:
+./gambit setup-wallet mainWallet sup3rS3cr3tP4ssw0rd 0x.... myL0ngS3cr3tK3yH3r3
+`,
+  )
   .description('Setup new wallet for Gambit')
   .argument(
     '<walletName>',

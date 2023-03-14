@@ -2,8 +2,6 @@ name = "arb"
 networkId = 42161
 chainId = 42161
 rpc = ["https://arb1.arbitrum.io/rpc"]
-# Uncoment if you have a WSS url
-# wss = ""
 dex = "camelot"
 # Should be etherscan, bscscan, arbiscan-esque compatible explorers
 explorer = "https://arbiscan.io"
@@ -24,6 +22,8 @@ refreshInteractive = true
 interactiveRefreshInSeconds = 10
 approveTo = false
 maxErrorCount = 3
+
+# These are unused currently
 toContracts = [ ]
 toContract = ""
 
@@ -42,6 +42,11 @@ factory = "0x6EcCab422D763aC031210895C81787E87B43A652"
 name = "lizard"
 router = "0xf26515d5482e2c2fd237149bf6a653da4794b3d0"
 factory = "0x734d84631f00dc0d3fcd18b04b6cf42bfd407074"
+
+[[dexes]]
+name = "alienfi"
+router = "0x863e9610e9e0c3986dcc6fb2cd335e11d88f7d5f"
+factory = "0xac9d019b7c8b7a4bbac64b2dbf6791ed672ba98b"
 
 # Add additional source tokens here
 # type = native | stable | reserve

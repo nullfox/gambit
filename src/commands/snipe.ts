@@ -1,8 +1,9 @@
 import { ethers } from 'ethers';
-import Notifier from 'node-notifier';
+// import Notifier from 'node-notifier';
 import pino from 'pino';
 import readline from 'readline';
 
+import { LOG_LEVEL } from '../constants.js';
 import Pair from '../libs/pair.js';
 import Sniper from '../libs/sniper.js';
 
@@ -33,7 +34,8 @@ type Snipe = (
 ) => Promise<void>;
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
+  name: 'command::snipe',
+  level: LOG_LEVEL,
 });
 
 const snipe: Snipe = async (
@@ -198,36 +200,36 @@ const snipe: Snipe = async (
       if (answer === 'sa') {
         const receipt = await pair.sellPercent(100);
 
-        Notifier.notify({
+        /* Notifier.notify({
           title: `Sold all "${targetToken.name}"`,
           open: `${explorer}/tx/${receipt.transactionHash}`,
           sound: true,
           wait: true,
-        });
+        }); */
 
         console.log('==== Transaction mined');
         console.dir(receipt, { depth: null, maxArrayLength: null });
       } else if (answer.startsWith('s')) {
         const receipt = await pair.sellPercent(parseFloat(answer.slice(1)));
 
-        Notifier.notify({
+        /* Notifier.notify({
           title: `Sold "${targetToken.name}"`,
           open: `${explorer}/tx/${receipt.transactionHash}`,
           sound: true,
           wait: true,
-        });
+        }); */
 
         console.log('==== Transaction mined');
         console.dir(receipt, { depth: null, maxArrayLength: null });
       } else {
         const receipt = await pair.buy(parseFloat(answer.slice(1)));
 
-        Notifier.notify({
+        /* Notifier.notify({
           title: `Bought "${targetToken.name}"`,
           open: `${explorer}/tx/${receipt.transactionHash}`,
           sound: true,
           wait: true,
-        });
+        }); */
 
         console.log('==== Transaction mined');
         console.dir(receipt, { depth: null, maxArrayLength: null });
@@ -256,12 +258,12 @@ const snipe: Snipe = async (
 
     const receipt = await pair.buy(resolvedTotalSpend);
 
-    Notifier.notify({
+    /* Notifier.notify({
       title: `Bought "${targetToken.name}"`,
       open: `${explorer}/tx/${receipt.transactionHash}`,
       sound: true,
       wait: true,
-    });
+    }); */
 
     console.log('==== Transaction mined');
     console.dir(receipt, { depth: null, maxArrayLength: null });
@@ -301,12 +303,12 @@ const snipe: Snipe = async (
         const receipt = await pair.buy(spendPerLoop);
         totalSpent += spendPerLoop;
 
-        Notifier.notify({
+        /* Notifier.notify({
           title: `Bought "${targetToken.name}"`,
           open: `${explorer}/tx/${receipt.transactionHash}`,
           sound: true,
           wait: true,
-        });
+        }); */
       } catch (error) {
         const transactionError = error as TransactionError;
 

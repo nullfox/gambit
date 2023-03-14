@@ -28,7 +28,6 @@ interface ChainConfiguration {
   networkId: number;
   chainId: number;
   rpc: string[];
-  wss?: string;
   dex: string;
   explorer: string;
 

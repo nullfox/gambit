@@ -5,6 +5,7 @@ import { join } from 'path';
 import pino, { Logger } from 'pino';
 import TOML from 'toml';
 
+import { LOG_LEVEL } from '../constants.js';
 import { Erc20__factory } from '../typechain/index.js';
 import Dex from './dex.js';
 
@@ -82,7 +83,7 @@ export default class Chain {
 
     this.logger = pino({
       name: 'class::chain',
-      level: process.env.LOG_LEVEL || 'info',
+      level: LOG_LEVEL,
     });
   }
 
