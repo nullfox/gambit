@@ -13,19 +13,25 @@
 Run `./gambit.js` to view the available commands and formatting
 
 Currently there are 2 commands available:
-**setup-wallet**: Encrypts your wallet file containing your wallet address and private key. You can see the format and example usage by running `./gambit.js setup-wallet --help`
 
-**snipe**: Runs the actual sniper with the given arguments, you can see the format and example usage by running `./gambit.js snipe --help`
+#### setup-wallet
+
+Encrypts your wallet file containing your wallet address and private key. You can see the format and example usage by running `./gambit.js setup-wallet --help`
+
+#### snipe
+
+Runs the actual sniper with the given arguments, you can see the format and example usage by running `./gambit.js snipe --help`
 
 ### Chains/Dexes
 Chain and dex configurations are stored in the `/configs` directory alongside any relevant ABI's
 
 Currently the supported chains & dexes are:
-**BSC**
+
+#### BSC
 - pancake
 - apebsc
 
-**ARB**
+#### ARB
 - sushi_arb
 - camelot
 - lizard
