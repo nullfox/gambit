@@ -73,3 +73,15 @@ totalSpend = 0
 check = true
 approve = true
 type= "stable"
+
+[[sources]]
+name = "USDT"
+decimals = 6
+address = "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9"
+minimumLp = 100
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type= "stable"

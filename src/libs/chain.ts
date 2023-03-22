@@ -166,8 +166,12 @@ export default class Chain {
     return this.loadSourceToken(foundToken.address);
   }
 
-  async getCheckableTokens() {
-    const foundTokens = this.config.sources.filter((source) => source.check);
+  async getCheckableTokens(name?: string) {
+    let foundTokens = this.config.sources.filter((source) => source.check);
+
+    if (name) {
+      foundTokens = foundTokens.filter((ft) => ft.name === name);
+    }
 
     return Promise.all(
       foundTokens.map((ft) => this.loadSourceToken(ft.address)),

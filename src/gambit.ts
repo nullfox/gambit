@@ -42,6 +42,7 @@ Example automated call:
   )
   .option('-g, --forceGas <number>', 'Amount of gas to spend', parseFloat)
   .option('-p, --password <string>', 'Key file decryption password')
+  .option('-s, --sourceToken <string>', 'Source token name to check')
   .action(snipe);
 
 program

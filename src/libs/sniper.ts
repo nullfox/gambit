@@ -60,6 +60,8 @@ export default class Sniper {
 
   private logger: Logger;
 
+  private forcedSourceToken?: string;
+
   constructor(
     walletName: string,
     chainName: string,
@@ -70,6 +72,7 @@ export default class Sniper {
       totalSpend?: number;
       loopSpend?: number;
       forceGas?: number;
+      sourceToken?: string;
     },
   ) {
     // Setup wallet (non-connected)
@@ -81,6 +84,8 @@ export default class Sniper {
     this.chain = Chain.fromName(chainName, this.wallet, {
       dex: dexName,
     });
+
+    this.forcedSourceToken = options?.sourceToken || undefined;
 
     this.logger = pino({
       name: 'class::sniper',
@@ -113,7 +118,7 @@ export default class Sniper {
   }
 
   async getCheckableTokens() {
-    return this.chain.getCheckableTokens();
+    return this.chain.getCheckableTokens(this.forcedSourceToken);
   }
 
   async getTargetToken() {
@@ -121,10 +126,16 @@ export default class Sniper {
   }
 
   async findOperatingPair(ignoreMinimumLp?: boolean) {
-    const checkableTokens = await this.chain.getCheckableTokens();
+    const checkableTokens = await this.getCheckableTokens();
 
     // Spread so when we shift, we don't fuck up by reference
     const sourceTokens = [...checkableTokens];
+
+    if (sourceTokens.length === 0 && !!this.forcedSourceToken) {
+      throw new Error(
+        `No source token could be found matching forced token "${this.forcedSourceToken}"`,
+      );
+    }
 
     const targetToken = await this.chain.getToken(this.tokenAddress);
 

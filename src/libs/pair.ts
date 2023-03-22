@@ -204,6 +204,8 @@ export default class Pair {
       this.sourceToken.decimals,
     );
 
+    await this.approveSourceToken();
+
     // Get our minimum amount out, accounting for slippage config
     const amountOut = await this.getPricePerSourceToken(inputTokenAmount);
 
@@ -482,6 +484,25 @@ export default class Pair {
     );
 
     return this.sell(balanceNumber * (percent / 100));
+  }
+
+  async approveSourceToken() {
+    const allowance = await this.sourceToken.contract.allowance(
+      this.wallet.address,
+      this.dex.getRouter().address,
+    );
+
+    if (allowance.gt(0)) {
+      return allowance;
+    }
+
+    const max = BigNumber.from(
+      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    );
+
+    await this.sourceToken.contract.approve(this.dex.getRouter().address, max);
+
+    return max;
   }
 
   async approveTargetToken() {

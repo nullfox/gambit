@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "lib/index.js",
-  "bin": "./gambit.js",
+  "bin": {
+    "gambit": "./gambit.js"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc",

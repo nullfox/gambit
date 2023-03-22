@@ -30,6 +30,7 @@ type Snipe = (
     totalSpend?: number;
     loopSpend?: number;
     forceGas?: number;
+    sourceToken?: string;
   },
 ) => Promise<void>;
 
