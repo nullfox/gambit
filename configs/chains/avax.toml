@@ -1,0 +1,77 @@
+name = "arb"
+networkId = 1
+chainId = 43114
+rpc = ["https://api.avax.network/ext/bc/C/rpc"]
+dex = "glacier"
+# Should be etherscan, bscscan, arbiscan-esque compatible explorers
+explorer = "https://snowtrace.io/"
+
+[buy]
+slippage = 1
+gwei = 3
+gas = 1469174
+
+[sell]
+slippage = 25
+gwei = 3
+gas = 1469174
+
+[misc]
+loopTimeInSeconds = 1
+refreshInteractive = true
+interactiveRefreshInSeconds = 10
+approveTo = false
+maxErrorCount = 3
+
+# These are unused currently
+toContracts = [ ]
+toContract = ""
+
+# Add additional dexes here
+[[dexes]]
+name = "glacier"
+router = "0xC5B8Ce3C8C171d506DEb069a6136a351Ee1629DC"
+factory = "0xaC7B7EaC8310170109301034b8FdB75eCa4CC491"
+
+[[dexes]]
+name = "pangolin"
+router = "0xE54Ca86531e17Ef3616d22Ca28b0D458b6C89106"
+factory = "0xefa94DE7a4656D787667C749f7E1223D71E9FD88"
+
+# Add additional source tokens here
+# type = native | stable | reserve
+[[sources]]
+name = "WAVAX"
+decimals = 18
+address = "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"
+minimumLp = 10
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type = "native"
+
+[[sources]]
+name = "USDC"
+decimals = 6
+address = "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e"
+minimumLp = 100
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type= "stable"
+
+[[sources]]
+name = "USDT"
+decimals = 6
+address = "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
+minimumLp = 100
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type= "stable"

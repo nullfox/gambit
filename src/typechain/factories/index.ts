@@ -3,6 +3,7 @@
 /* eslint-disable */
 export { Erc20__factory } from './Erc20__factory.js';
 export { Factory__factory } from './Factory__factory.js';
+export { Factory_avax_glacier__factory } from './Factory_avax_glacier__factory.js';
 export { Pair__factory } from './Pair__factory.js';
 export { Router__factory } from './Router__factory.js';
 export { Router_arb_camelot__factory } from './Router_arb_camelot__factory.js';

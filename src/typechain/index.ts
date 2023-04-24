@@ -3,12 +3,14 @@
 /* eslint-disable */
 export type { Erc20 } from './Erc20.js';
 export type { Factory } from './Factory.js';
+export type { Factory_avax_glacier } from './Factory_avax_glacier.js';
 export type { Pair } from './Pair.js';
 export type { Router } from './Router.js';
 export type { Router_arb_camelot } from './Router_arb_camelot.js';
 export * as factories from './factories/index.js';
 export { Erc20__factory } from './factories/Erc20__factory.js';
 export { Factory__factory } from './factories/Factory__factory.js';
+export { Factory_avax_glacier__factory } from './factories/Factory_avax_glacier__factory.js';
 export { Pair__factory } from './factories/Pair__factory.js';
-export { Router_arb_camelot__factory } from './factories/Router_arb_camelot__factory.js';
 export { Router__factory } from './factories/Router__factory.js';
+export { Router_arb_camelot__factory } from './factories/Router_arb_camelot__factory.js';

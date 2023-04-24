@@ -2,7 +2,20 @@ import { Wallet } from 'ethers';
 
 import * as Typechain from '../typechain/index.js';
 import Chain from './chain.js';
+import { GlacierFactory } from './dex/glacier.js';
+import { PrimaryFactory } from './dex/primary.js';
 import Pair from './pair.js';
+
+const getFactoryAdapter = (
+  dexName: string,
+  factory: Typechain.Factory | Typechain.Factory_avax_glacier,
+) => {
+  if (dexName === 'glacier') {
+    return new GlacierFactory(factory as Typechain.Factory_avax_glacier);
+  }
+
+  return new PrimaryFactory(factory as Typechain.Factory);
+};
 
 export default class Dex {
   private config: ChainConfigurationDex;
@@ -10,7 +23,10 @@ export default class Dex {
   private wallet: Wallet;
 
   private router: Typechain.Router | Typechain.Router_arb_camelot | undefined;
-  private factory: Typechain.Factory | undefined;
+  private factory:
+    | Typechain.Factory
+    | Typechain.Factory_avax_glacier
+    | undefined;
 
   constructor(config: ChainConfigurationDex, chain: Chain, wallet: Wallet) {
     this.config = config;
@@ -50,10 +66,17 @@ export default class Dex {
         factoryAddress = await router.callStatic.factory();
       }
 
-      this.factory = Typechain.Factory__factory.connect(
-        factoryAddress,
-        this.wallet,
-      );
+      if (this.config.name === 'glacier') {
+        this.factory = Typechain.Factory_avax_glacier__factory.connect(
+          factoryAddress,
+          this.wallet,
+        );
+      } else {
+        this.factory = Typechain.Factory__factory.connect(
+          factoryAddress,
+          this.wallet,
+        );
+      }
     }
 
     return this.factory;
@@ -76,9 +99,9 @@ export default class Dex {
       return cachedPair;
     } */
 
-    const address = await factory.callStatic.getPair(
-      sourceToken.address,
-      targetToken.address,
+    const address = await getFactoryAdapter(this.config.name, factory).getPair(
+      sourceToken,
+      targetToken,
     );
 
     if (!address || address.startsWith('0x0000000')) {

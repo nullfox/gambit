@@ -1,34 +1,40 @@
-import { BigNumber, constants } from 'ethers';
-import { Factory } from '../../typechain/Factory.js';
+import { BigNumber } from 'ethers';
+import { Factory_avax_glacier } from '../../typechain/Factory_avax_glacier.js';
 
-import { Router } from '../../typechain/Router.js';
+import { Router_arb_camelot } from '../../typechain/Router_arb_camelot.js';
 import Pair from '../pair.js';
 
-export class PrimaryFactory {
-  protected factory: Factory;
+export class GlacierFactory {
+  protected factory: Factory_avax_glacier;
 
-  constructor(factory: Factory) {
+  constructor(factory: Factory_avax_glacier) {
     this.factory = factory;
   }
 
-  async getPair(token1: Token, token2: Token) {
-    return this.factory.callStatic.getPair(token1.address, token2.address);
+  async getPair(token1: Token | SourceToken, token2: Token | SourceToken) {
+    const stable =
+      ((token1 as SourceToken).type &&
+        (token1 as SourceToken).type === 'stable') ||
+      ((token2 as SourceToken).type &&
+        (token2 as SourceToken).type === 'stable');
+
+    return this.factory.callStatic.getPair(
+      token1.address,
+      token2.address,
+      stable,
+    );
   }
 }
 
-export default class Primary {
+export default class Glacier {
   protected pair: Pair;
 
   constructor(pair: Pair) {
     this.pair = pair;
   }
 
-  getPair() {
-    return this.pair;
-  }
-
-  getRouter(): Router {
-    return this.pair.getDex().getRouter() as Router;
+  getRouter(): Router_arb_camelot {
+    return this.pair.getDex().getRouter() as Router_arb_camelot;
   }
 
   getParams() {
@@ -56,6 +62,7 @@ export default class Primary {
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
         ),
@@ -66,6 +73,7 @@ export default class Primary {
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
         ),
@@ -76,43 +84,22 @@ export default class Primary {
     const params = this.getParams();
 
     return {
-      estimate: async (options: DexOptions & { value: BigNumber }) => {
-        console.log(
-          await this.getPair()
-            .getSourceToken()
-            .contract.allowance(
-              this.getPair().getWallet().address,
-              this.getPair().getDex().getRouter().address,
-            ),
-        );
-
-        console.log(
-          await this.getPair()
-            .getTargetToken()
-            .contract.allowance(
-              this.getPair().getWallet().address,
-              this.getPair().getDex().getRouter().address,
-            ),
-        );
-
-        await this.getPair()
-          .getTargetToken()
-          .contract.approve(this.getRouter().address, constants.MaxUint256);
-
-        return params.router.estimateGas.swapExactETHForTokensSupportingFeeOnTransferTokens(
+      estimate: async (options: DexOptions & { value: BigNumber }) =>
+        params.router.estimateGas.swapExactETHForTokensSupportingFeeOnTransferTokens(
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
-        );
-      },
+        ),
 
       execute: async (options: DexNonceOptions & { value: BigNumber }) =>
         params.router.swapExactETHForTokensSupportingFeeOnTransferTokens(
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
         ),
@@ -129,6 +116,7 @@ export default class Primary {
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
         ),
@@ -139,6 +127,7 @@ export default class Primary {
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
         ),
@@ -155,6 +144,7 @@ export default class Primary {
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
         ),
@@ -165,6 +155,7 @@ export default class Primary {
           amountOutMin,
           params.path,
           params.wallet,
+          '0x0000000000000000000000000000000000000000',
           Date.now() + 1000 * 60 * 10,
           options,
         ),
