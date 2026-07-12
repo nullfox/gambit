@@ -6,7 +6,7 @@ import { GlacierFactory } from './dex/glacier.js';
 import { PrimaryFactory } from './dex/primary.js';
 import Pair from './pair.js';
 
-const getFactoryAdapter = (
+export const getFactoryAdapter = (
   dexName: string,
   factory: Typechain.Factory | Typechain.Factory_avax_glacier,
 ) => {

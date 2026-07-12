@@ -1,22 +1,18 @@
 import { BigNumber, BigNumberish, Wallet, ethers } from 'ethers';
 import pino, { Logger } from 'pino';
 
-import {
-  BP_DIVISOR,
-  GAS_LIMIT_THRESHOLD,
-  GAS_MULTIPLIER,
-  LOG_LEVEL,
-} from '../constants.js';
+import { GAS_LIMIT_THRESHOLD, LOG_LEVEL } from '../constants.js';
 import * as Typechain from '../typechain/index.js';
 import Dex from './dex.js';
 import Camelot from './dex/camelot.js';
 import Primary from './dex/primary.js';
+import { applySlippage, blockGasCeiling, clampGas } from './execution.js';
 
 const pairAdapters = {
   camelot: Camelot,
 };
 
-const getPairAdapter = (dexName: string, pair: Pair) => {
+export const getPairAdapter = (dexName: string, pair: Pair) => {
   if (!Object.keys(pairAdapters).includes(dexName)) {
     return new Primary(pair);
   }
@@ -209,9 +205,7 @@ export default class Pair {
     // Get our minimum amount out, accounting for slippage config
     const amountOut = await this.getPricePerSourceToken(inputTokenAmount);
 
-    const amountOutMin = amountOut.sub(
-      amountOut.mul(buyConfiguration.slippage).div(100),
-    );
+    const amountOutMin = applySlippage(amountOut, buyConfiguration.slippage);
 
     // Setup our gas limits
     const gasPrice = ethers.utils.parseUnits(
@@ -246,35 +240,22 @@ export default class Pair {
         });
     }
 
-    gas = estimatedGas;
-
-    const blackGasThresholdBasis = GAS_LIMIT_THRESHOLD * BP_DIVISOR;
-
     const latestBlock = await this.dex.getChain().getLatestBlock();
-    const blockGasLimit = latestBlock.gasLimit.eq(0)
-      ? BigNumber.from(1500000)
-      : latestBlock.gasLimit.gt(8000000)
-      ? BigNumber.from(8000000)
-      : latestBlock.gasLimit;
-    const blockGasLimitThreshold = blockGasLimit
-      .mul(blackGasThresholdBasis)
-      .div(BP_DIVISOR);
+    const ceiling = blockGasCeiling(latestBlock.gasLimit);
 
-    if (gas.gte(blockGasLimitThreshold)) {
+    if (estimatedGas.gte(ceiling)) {
       this.logger.info(
         {
-          blockGasLimit: blockGasLimit.toString(),
-          blockGasLimitThreshold: blockGasLimitThreshold.toString(),
-          gas: gas.toString(),
-          blockGasLimitThresholdPercent: blackGasThresholdBasis / BP_DIVISOR,
+          blockGasLimit: latestBlock.gasLimit.toString(),
+          blockGasCeiling: ceiling.toString(),
+          estimatedGas: estimatedGas.toString(),
+          thresholdPercent: GAS_LIMIT_THRESHOLD,
         },
-        'Estimated gas is higher than block gas limit threshold, setting to block gas limit threshold',
+        'Estimated gas exceeds the block gas ceiling — clamping to ceiling',
       );
-
-      gas = blockGasLimitThreshold;
     }
 
-    gas = gas.mul(GAS_MULTIPLIER * BP_DIVISOR).div(BP_DIVISOR);
+    gas = clampGas(estimatedGas, latestBlock.gasLimit);
 
     const nonce = await this.wallet.getTransactionCount('pending');
 
@@ -342,9 +323,7 @@ export default class Pair {
     // Get our minimum amount out, accounting for slippage config
     const amountOut = await this.getPricePerTargetToken(inputTokenAmount);
 
-    const amountOutMin = amountOut.sub(
-      amountOut.mul(sellConfiguration.slippage).div(100),
-    );
+    const amountOutMin = applySlippage(amountOut, sellConfiguration.slippage);
 
     // Setup our gas limits
     const gasPrice = ethers.utils.parseUnits(
@@ -382,35 +361,22 @@ export default class Pair {
         });
     }
 
-    gas = estimatedGas;
-
-    const blackGasThresholdBasis = GAS_LIMIT_THRESHOLD * BP_DIVISOR;
-
     const latestBlock = await this.dex.getChain().getLatestBlock();
-    const blockGasLimit = latestBlock.gasLimit.eq(0)
-      ? BigNumber.from(1500000)
-      : latestBlock.gasLimit.gt(8000000)
-      ? BigNumber.from(8000000)
-      : latestBlock.gasLimit;
-    const blockGasLimitThreshold = blockGasLimit
-      .mul(blackGasThresholdBasis)
-      .div(BP_DIVISOR);
+    const ceiling = blockGasCeiling(latestBlock.gasLimit);
 
-    if (gas.gte(blockGasLimitThreshold)) {
+    if (estimatedGas.gte(ceiling)) {
       this.logger.info(
         {
-          blockGasLimit: blockGasLimit.toString(),
-          blockGasLimitThreshold: blockGasLimitThreshold.toString(),
-          gas: gas.toString(),
-          blockGasLimitThresholdPercent: blackGasThresholdBasis / BP_DIVISOR,
+          blockGasLimit: latestBlock.gasLimit.toString(),
+          blockGasCeiling: ceiling.toString(),
+          estimatedGas: estimatedGas.toString(),
+          thresholdPercent: GAS_LIMIT_THRESHOLD,
         },
-        'Estimated gas is higher than block gas limit threshold, setting to block gas limit threshold',
+        'Estimated gas exceeds the block gas ceiling — clamping to ceiling',
       );
-
-      gas = blockGasLimitThreshold;
     }
 
-    gas = gas.mul(GAS_MULTIPLIER * BP_DIVISOR).div(BP_DIVISOR);
+    gas = clampGas(estimatedGas, latestBlock.gasLimit);
 
     const nonce = await this.wallet.getTransactionCount('pending');
 
