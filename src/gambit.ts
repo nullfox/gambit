@@ -56,6 +56,10 @@ GAMBIT_PASSWORD=... ./gambit snipe mainWallet arb camelot 0x522... --totalSpend=
     'Key file decryption password (discouraged — prefer the prompt or GAMBIT_PASSWORD)',
   )
   .option('-s, --sourceToken <string>', 'Source token name to check')
+  .option(
+    '-e, --exactApproval',
+    'Approve only the exact spend amount instead of an unlimited (max-uint) allowance',
+  )
   .action(
     async (
       walletName: string,
@@ -68,6 +72,7 @@ GAMBIT_PASSWORD=... ./gambit snipe mainWallet arb camelot 0x522... --totalSpend=
         loopSpend?: number;
         forceGas?: number;
         sourceToken?: string;
+        exactApproval?: boolean;
       },
     ) => {
       // Only encrypted wallets need a password; raw .json wallets do not.

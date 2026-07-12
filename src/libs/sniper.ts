@@ -73,6 +73,7 @@ export default class Sniper {
       loopSpend?: number;
       forceGas?: number;
       sourceToken?: string;
+      exactApproval?: boolean;
     },
   ) {
     // Setup wallet (non-connected)
@@ -83,6 +84,7 @@ export default class Sniper {
 
     this.chain = Chain.fromName(chainName, this.wallet, {
       dex: dexName,
+      exactApproval: options?.exactApproval,
     });
 
     this.forcedSourceToken = options?.sourceToken || undefined;

@@ -204,7 +204,7 @@ export default class Pair {
       this.sourceToken.decimals,
     );
 
-    await this.approveSourceToken();
+    await this.approveSourceToken(inputTokenAmount);
 
     // Get our minimum amount out, accounting for slippage config
     const amountOut = await this.getPricePerSourceToken(inputTokenAmount);
@@ -362,7 +362,7 @@ export default class Pair {
 
     const pairAdapter = getPairAdapter(this.dex.getName(), this);
 
-    await this.approveTargetToken();
+    await this.approveTargetToken(inputTokenAmount);
 
     if (this.sourceToken.type === 'native') {
       transactionValue = inputTokenAmount;
@@ -477,41 +477,37 @@ export default class Pair {
     return this.sell(balanceNumber * (percent / 100));
   }
 
-  async approveSourceToken() {
-    const allowance = await this.sourceToken.contract.allowance(
-      this.wallet.address,
-      this.dex.getRouter().address,
-    );
-
-    if (allowance.gt(0)) {
-      return allowance;
-    }
-
-    const max = BigNumber.from(
-      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-    );
-
-    await this.sourceToken.contract.approve(this.dex.getRouter().address, max);
-
-    return max;
+  async approveSourceToken(amount?: BigNumber) {
+    return this.approveToken(this.sourceToken, amount);
   }
 
-  async approveTargetToken() {
-    const allowance = await this.targetToken.contract.allowance(
+  async approveTargetToken(amount?: BigNumber) {
+    return this.approveToken(this.targetToken, amount);
+  }
+
+  // Approve the router to spend `token`. By default this grants an unlimited
+  // (max-uint) allowance — one approval covers every future trade, saving the
+  // per-trade approval gas and latency that matter when sniping. When the
+  // chain is configured for exact approvals, only `amount` is granted instead,
+  // which limits how much a compromised or malicious router can ever pull.
+  private async approveToken(token: Token | SourceToken, amount?: BigNumber) {
+    const spender = this.dex.getRouter().address;
+
+    const allowance = await token.contract.allowance(
       this.wallet.address,
-      this.dex.getRouter().address,
+      spender,
     );
 
-    if (allowance.gt(0)) {
+    const exact = this.dex.getChain().useExactApproval() && !!amount;
+    const required = exact ? (amount as BigNumber) : ethers.constants.MaxUint256;
+
+    // Existing allowance already covers what this trade needs.
+    if (allowance.gte(required)) {
       return allowance;
     }
 
-    const max = BigNumber.from(
-      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-    );
+    await token.contract.approve(spender, required);
 
-    await this.targetToken.contract.approve(this.dex.getRouter().address, max);
-
-    return max;
+    return required;
   }
 }
