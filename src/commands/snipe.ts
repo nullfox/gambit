@@ -1,5 +1,4 @@
 import { ethers } from 'ethers';
-// import Notifier from 'node-notifier';
 import pino from 'pino';
 import readline from 'readline';
 
@@ -31,6 +30,7 @@ type Snipe = (
     loopSpend?: number;
     forceGas?: number;
     sourceToken?: string;
+    exactApproval?: boolean;
   },
 ) => Promise<void>;
 
@@ -38,6 +38,18 @@ const logger = pino({
   name: 'command::snipe',
   level: LOG_LEVEL,
 });
+
+const logMinedTransaction = (receipt: TransactionRecipt, explorer: string) => {
+  const base = explorer.replace(/\/+$/, '');
+
+  logger.info(
+    {
+      transactionHash: receipt.transactionHash,
+      url: `${base}/tx/${receipt.transactionHash}`,
+    },
+    'Transaction mined',
+  );
+};
 
 const snipe: Snipe = async (
   walletName,
@@ -201,39 +213,15 @@ const snipe: Snipe = async (
       if (answer === 'sa') {
         const receipt = await pair.sellPercent(100);
 
-        /* Notifier.notify({
-          title: `Sold all "${targetToken.name}"`,
-          open: `${explorer}/tx/${receipt.transactionHash}`,
-          sound: true,
-          wait: true,
-        }); */
-
-        console.log('==== Transaction mined');
-        console.dir(receipt, { depth: null, maxArrayLength: null });
+        logMinedTransaction(receipt, explorer);
       } else if (answer.startsWith('s')) {
         const receipt = await pair.sellPercent(parseFloat(answer.slice(1)));
 
-        /* Notifier.notify({
-          title: `Sold "${targetToken.name}"`,
-          open: `${explorer}/tx/${receipt.transactionHash}`,
-          sound: true,
-          wait: true,
-        }); */
-
-        console.log('==== Transaction mined');
-        console.dir(receipt, { depth: null, maxArrayLength: null });
+        logMinedTransaction(receipt, explorer);
       } else {
         const receipt = await pair.buy(parseFloat(answer.slice(1)));
 
-        /* Notifier.notify({
-          title: `Bought "${targetToken.name}"`,
-          open: `${explorer}/tx/${receipt.transactionHash}`,
-          sound: true,
-          wait: true,
-        }); */
-
-        console.log('==== Transaction mined');
-        console.dir(receipt, { depth: null, maxArrayLength: null });
+        logMinedTransaction(receipt, explorer);
       }
     });
   };
@@ -259,15 +247,7 @@ const snipe: Snipe = async (
 
     const receipt = await pair.buy(resolvedTotalSpend);
 
-    /* Notifier.notify({
-      title: `Bought "${targetToken.name}"`,
-      open: `${explorer}/tx/${receipt.transactionHash}`,
-      sound: true,
-      wait: true,
-    }); */
-
-    console.log('==== Transaction mined');
-    console.dir(receipt, { depth: null, maxArrayLength: null });
+    logMinedTransaction(receipt, explorer);
   } else if (totalSpend && spendPerLoop && spendPerLoop > 0) {
     logger.info(
       {
@@ -304,12 +284,7 @@ const snipe: Snipe = async (
         const receipt = await pair.buy(spendPerLoop);
         totalSpent += spendPerLoop;
 
-        /* Notifier.notify({
-          title: `Bought "${targetToken.name}"`,
-          open: `${explorer}/tx/${receipt.transactionHash}`,
-          sound: true,
-          wait: true,
-        }); */
+        logMinedTransaction(receipt, explorer);
       } catch (error) {
         const transactionError = error as TransactionError;
 
@@ -328,8 +303,6 @@ const snipe: Snipe = async (
 
       await new Promise((resolve) => setTimeout(resolve, loopTime * 1000));
     }
-
-    // TODO: Loop spend
   } else {
     logger.info('Entering interactive mode - total spend not set');
 

@@ -3,6 +3,11 @@ import { Command } from 'commander';
 
 import setupWallet from './commands/setupWallet.js';
 import snipe from './commands/snipe.js';
+import {
+  resolvePassword,
+  resolveWalletKey,
+  walletIsEncrypted,
+} from './services/prompt.js';
 
 const program = new Command();
 
@@ -12,11 +17,16 @@ program
     'after',
     `
 
+The wallet password is prompted for (hidden) when the wallet is
+encrypted. To run non-interactively, set GAMBIT_PASSWORD in the
+environment instead of passing --password (which leaks into shell
+history and the process listing).
+
 Example interactive call:
-./gambit snipe mainWallet arb camelot 0x522... --password sup3rS3cr3tP4ssw0rd
+./gambit snipe mainWallet arb camelot 0x522...
 
 Example automated call:
-./gambit snipe mainWallet arb camelot 0x522... --password=sup3rS3cr3tP4ssw0rd --totalSpend="0.01"
+GAMBIT_PASSWORD=... ./gambit snipe mainWallet arb camelot 0x522... --totalSpend="0.01"
 `,
   )
   .description('Snipe token LP')
@@ -41,9 +51,38 @@ Example automated call:
     parseFloat,
   )
   .option('-g, --forceGas <number>', 'Amount of gas to spend', parseFloat)
-  .option('-p, --password <string>', 'Key file decryption password')
+  .option(
+    '-p, --password <string>',
+    'Key file decryption password (discouraged — prefer the prompt or GAMBIT_PASSWORD)',
+  )
   .option('-s, --sourceToken <string>', 'Source token name to check')
-  .action(snipe);
+  .option(
+    '-e, --exactApproval',
+    'Approve only the exact spend amount instead of an unlimited (max-uint) allowance',
+  )
+  .action(
+    async (
+      walletName: string,
+      chain: string,
+      dex: string,
+      token: string,
+      options: {
+        password?: string;
+        totalSpend?: number;
+        loopSpend?: number;
+        forceGas?: number;
+        sourceToken?: string;
+        exactApproval?: boolean;
+      },
+    ) => {
+      // Only encrypted wallets need a password; raw .json wallets do not.
+      const password = walletIsEncrypted(walletName)
+        ? await resolvePassword(options.password)
+        : undefined;
+
+      return snipe(walletName, chain, dex, token, { ...options, password });
+    },
+  );
 
 program
   .command('setup-wallet')
@@ -51,8 +90,12 @@ program
     'after',
     `
 
+The private key and encryption password are prompted for (hidden) so
+they never touch argv. For automation, set GAMBIT_WALLET_KEY and
+GAMBIT_PASSWORD in the environment instead.
+
 Example call:
-./gambit setup-wallet mainWallet sup3rS3cr3tP4ssw0rd 0x.... myL0ngS3cr3tK3yH3r3
+./gambit setup-wallet mainWallet 0x....
 `,
   )
   .description('Setup new wallet for Gambit')
@@ -60,18 +103,17 @@ Example call:
     '<walletName>',
     'Name of the wallet file WITHOUT extension (ex: my-key)',
   )
-  .argument('<password>', 'Password to encrypt key file with')
   .argument('<address>', 'Your wallet address (ex: 0x78...)')
-  .argument('<secretKey>', 'Secret key associated to your wallet')
   .option('-f, --force [boolean]', 'Force existing file deletion', false)
   .action(
     async (
       walletName: string,
-      password: string,
       address: string,
-      secretKey: string,
       options: { force?: boolean },
     ) => {
+      const secretKey = await resolveWalletKey();
+      const password = await resolvePassword(undefined, { confirm: true });
+
       const path = await setupWallet(
         walletName,
         password,

@@ -6,7 +6,7 @@ import { GlacierFactory } from './dex/glacier.js';
 import { PrimaryFactory } from './dex/primary.js';
 import Pair from './pair.js';
 
-const getFactoryAdapter = (
+export const getFactoryAdapter = (
   dexName: string,
   factory: Typechain.Factory | Typechain.Factory_avax_glacier,
 ) => {
@@ -91,13 +91,6 @@ export default class Dex {
     targetToken: Token,
   ): Promise<Pair | undefined> {
     const factory = await this.getFactory();
-
-    /* const cacheKey = `${this.tokenAddress}::${token.address}`;
-    const cachedPair = this.pairs.get(cacheKey);
-
-    if (cachedPair) {
-      return cachedPair;
-    } */
 
     const address = await getFactoryAdapter(this.config.name, factory).getPair(
       sourceToken,

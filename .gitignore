@@ -1,5 +1,13 @@
 lib/
 node_modules/
+
+# Secrets — never commit real wallets, keys, or env files
 *.crypt
 wallets/*
 !wallets/template.json
+.env
+.env.*
+!.env.example
+
+# Test / build artifacts
+coverage/

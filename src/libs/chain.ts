@@ -26,7 +26,11 @@ export default class Chain {
     return TOML.parse(contents) as ChainConfiguration;
   }
 
-  static fromName(name: string, wallet: Wallet, options?: { dex?: string }) {
+  static fromName(
+    name: string,
+    wallet: Wallet,
+    options?: { dex?: string; exactApproval?: boolean },
+  ) {
     const configuration = this.getConfiguration(name);
 
     return new Chain(configuration, wallet, options);
@@ -39,6 +43,8 @@ export default class Chain {
 
   private dex: Dex;
 
+  private exactApproval: boolean;
+
   private logger: Logger;
 
   private tokenCache: Map<string, Token> = new Map<string, Token>();
@@ -50,9 +56,11 @@ export default class Chain {
   constructor(
     config: ChainConfiguration,
     wallet: Wallet,
-    options?: { dex?: string },
+    options?: { dex?: string; exactApproval?: boolean },
   ) {
     this.config = config;
+
+    this.exactApproval = options?.exactApproval ?? false;
 
     // Setup RPC provider
     this.rpcProviders = this.config.rpc.map(
@@ -101,6 +109,10 @@ export default class Chain {
 
   getDex() {
     return this.dex;
+  }
+
+  useExactApproval() {
+    return this.exactApproval;
   }
 
   async getBlockNumber() {

@@ -1,0 +1,63 @@
+name = "base"
+networkId = 8453
+chainId = 8453
+rpc = ["https://mainnet.base.org"]
+dex = "uniswap"
+# Should be etherscan, bscscan, arbiscan-esque compatible explorers
+explorer = "https://basescan.org"
+
+[buy]
+slippage = 1
+# Base base-fees run well under 1 gwei; tune per market conditions.
+gwei = 1
+gas = 1469174
+
+[sell]
+slippage = 25
+gwei = 1
+gas = 1469174
+
+[misc]
+loopTimeInSeconds = 1
+refreshInteractive = true
+interactiveRefreshInSeconds = 10
+approveTo = false
+maxErrorCount = 3
+
+# These are unused currently
+toContracts = [ ]
+toContract = ""
+
+# Add additional dexes here.
+# Uniswap V2 is officially deployed on Base and uses the standard V2 router
+# interface, so it works with Gambit's Primary adapter unchanged.
+[[dexes]]
+name = "uniswap"
+router = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+factory = "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6"
+
+# Add additional source tokens here
+# type = native | stable | reserve
+[[sources]]
+name = "WETH"
+decimals = 18
+address = "0x4200000000000000000000000000000000000006"
+minimumLp = 1
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type = "native"
+
+[[sources]]
+name = "USDC"
+decimals = 6
+address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+minimumLp = 100
+totalSpend = 0
+# Uncomment if you want looped spending
+# spendPerLoop = 0
+check = true
+approve = true
+type= "stable"
