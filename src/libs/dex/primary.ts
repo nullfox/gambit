@@ -1,4 +1,4 @@
-import { BigNumber, constants } from 'ethers';
+import { BigNumber } from 'ethers';
 import { Factory } from '../../typechain/Factory.js';
 
 import { Router } from '../../typechain/Router.js';
@@ -76,37 +76,14 @@ export default class Primary {
     const params = this.getParams();
 
     return {
-      estimate: async (options: DexOptions & { value: BigNumber }) => {
-        console.log(
-          await this.getPair()
-            .getSourceToken()
-            .contract.allowance(
-              this.getPair().getWallet().address,
-              this.getPair().getDex().getRouter().address,
-            ),
-        );
-
-        console.log(
-          await this.getPair()
-            .getTargetToken()
-            .contract.allowance(
-              this.getPair().getWallet().address,
-              this.getPair().getDex().getRouter().address,
-            ),
-        );
-
-        await this.getPair()
-          .getTargetToken()
-          .contract.approve(this.getRouter().address, constants.MaxUint256);
-
-        return params.router.estimateGas.swapExactETHForTokensSupportingFeeOnTransferTokens(
+      estimate: async (options: DexOptions & { value: BigNumber }) =>
+        params.router.estimateGas.swapExactETHForTokensSupportingFeeOnTransferTokens(
           amountOutMin,
           params.path,
           params.wallet,
           Date.now() + 1000 * 60 * 10,
           options,
-        );
-      },
+        ),
 
       execute: async (options: DexNonceOptions & { value: BigNumber }) =>
         params.router.swapExactETHForTokensSupportingFeeOnTransferTokens(

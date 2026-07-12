@@ -362,16 +362,7 @@ export default class Pair {
 
     const pairAdapter = getPairAdapter(this.dex.getName(), this);
 
-    const allowance = await this.approveTargetToken();
-
-    console.log('=== SELL', {
-      amount: amount.toString(),
-      inputTokenAmount: inputTokenAmount.toString(),
-      amountOut: amountOut.toString(),
-      amountOutMin: amountOutMin.toString(),
-      gasPrice: gasPrice.toString(),
-      allowance: allowance.toString(),
-    });
+    await this.approveTargetToken();
 
     if (this.sourceToken.type === 'native') {
       transactionValue = inputTokenAmount;

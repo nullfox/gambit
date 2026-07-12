@@ -92,13 +92,6 @@ export default class Dex {
   ): Promise<Pair | undefined> {
     const factory = await this.getFactory();
 
-    /* const cacheKey = `${this.tokenAddress}::${token.address}`;
-    const cachedPair = this.pairs.get(cacheKey);
-
-    if (cachedPair) {
-      return cachedPair;
-    } */
-
     const address = await getFactoryAdapter(this.config.name, factory).getPair(
       sourceToken,
       targetToken,
