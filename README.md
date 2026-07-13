@@ -15,9 +15,10 @@ The original use case — sniping a liquidity pool the instant it opens — is w
 forced those problems into the open. That use case is described below, but it is
 the *problem domain*, not the point. The point is the execution infrastructure.
 
-> **Portfolio note.** This repo is a sanitized version of a bot I ran a few
-> years ago, brought up to date as a portfolio piece. It ships no wallets, no
-> keys, and no private configuration — only public contract addresses. The
+> **Portfolio note.** This is the complete bot I ran a few years ago — not a
+> partial excerpt — brought up to date as a portfolio piece with the live keys
+> and private configuration stripped out. It ships no wallets, no keys, and no
+> trading edge — only public contract addresses. The
 > [`CHANGELOG`](./CHANGELOG.md) records the 2026 modernization pass, and the
 > [Design Observations](#design-observations-gaps--risks) section is a candid
 > account of what I'd keep, what I fixed, and what I'd still change.
